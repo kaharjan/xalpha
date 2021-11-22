@@ -80,7 +80,7 @@ class mul:
         fundcodelist = [f.code for f in fundtradeobj]
         if status is not None:
             for code in status.columns:
-                if code == "date":
+                if code == "date" or code.startswith("#"):
                     continue
                 # r1, d2, v4 p = r+d+v
                 if code in fundcodelist:
@@ -119,13 +119,13 @@ class mul:
                             status,
                         )
                     )
-            if istatus is not None:
-                self.is_in = True
-                if isinstance(istatus, irecord):
-                    istatus = istatus.status
-                for code in istatus.code.unique():
-                    if code not in fundcodelist and not code.startswith("#"):
-                        fundtradeobj.append(itrade(code, istatus))
+        if istatus is not None:
+            self.is_in = True
+            if isinstance(istatus, irecord):
+                istatus = istatus.status
+            for code in istatus.code.unique():
+                if code not in fundcodelist and not code.startswith("#"):
+                    fundtradeobj.append(itrade(code, istatus))
         self.fundtradeobj = tuple(fundtradeobj)
         self.totcftable = self._mergecftb()
 
@@ -139,7 +139,7 @@ class mul:
         """
         res = 0
         for fund in self.fundtradeobj:
-            res += fund.dailyreport().iloc[0][prop]
+            res += fund.dailyreport(date).iloc[0][prop]
         return res
 
     def combsummary(self, date=yesterdayobj()):

@@ -39,7 +39,7 @@ def test_get_rmb():
 
 
 def test_get_fund():
-    df = xa.get_daily(code="F100032")
+    df = xa.get_daily(code="F100032", start="2020-02-01")
     assert round(df[df["date"] == "2020-03-06"].iloc[0]["close"], 3) == 1.036
     df = xa.get_daily(code="M002758", start="20200201")
     assert round(df.iloc[1]["close"], 3) == 1.134
@@ -50,6 +50,7 @@ def test_get_fund_pt():
     assert round(df[df["date"] < "2020-01-01"].iloc[-1]["bond_ratio"], 2) == 0.08
 
 
+@pytest.mark.skip(reason="cninvesting explorer check")
 def test_get_investing():
     df1 = xa.get_daily(code="indices/germany-30")
     df2 = xa.get_daily(code="172")
@@ -61,7 +62,8 @@ def test_get_investing():
     df.v_kline(ucolor="#ffffff", ucolorborder="#ef232a")
 
 
-@pytest.mark.local
+# @pytest.mark.local
+@pytest.mark.skip(reason="cninvesting explorer check")
 def test_get_investng_app():
     df = xa.get_daily(
         code="INA-currencies/usd-cny", end="20200307", prev=30
@@ -82,6 +84,7 @@ def test_get_sina_rt():
     xa.get_rt("SH600000", double_check=True)
 
 
+@pytest.mark.skip(reason="cninvesting explorer check")
 def test_get_investing_rt():
     assert xa.get_rt("currencies/usd-cny")["currency"] == None
     assert xa.get_rt("/indices/germany-30")["name"] == "德国DAX30指数 (GDAXI)"
@@ -105,7 +108,8 @@ def test_get_sp_daily():
     assert round(df.iloc[-1]["close"], 3) == 1349.31
 
 
-@pytest.mark.local
+# @pytest.mark.local
+@pytest.mark.skip(reason="blommberg network connection issue")
 def test_get_bb_daily(proxy):
     df = xa.get_daily("BB-FGERBIU:ID", prev=10)
 
@@ -174,7 +178,7 @@ def test_cache_mm():
 def test_get_bar_xq():
     xa.get_bar("HK00700", interval=60)
     xa.get_bar("SH600000", interval=3600)
-    xa.get_bar("commodities/brent-oil", interval=300, prev=20)
+    # xa.get_bar("commodities/brent-oil", interval=300, prev=20)
 
 
 def test_set_handler():
@@ -212,8 +216,10 @@ def test_cache_time():
 def test_get_ttjj():
     assert xa.get_rt("F501018")["name"] == "南方原油A"
     assert xa.get_rt("F511600")["type"] == "货币型"
+    assert xa.get_rt("F003816")["market"] == "CN"
 
 
+@pytest.mark.local
 def test_get_zzindex():
     assert len(xa.get_daily("ZZH30533")) > 100
 
@@ -227,7 +233,7 @@ def test_get_hzindex():
     assert len(xa.get_daily("HZ999002")) > 100
 
 
-# @pytest.mark.skip(reason="esunny website down")
+@pytest.mark.skip(reason="esunny website down")
 def test_get_es():
     df = xa.get_daily("ESCI000302", start="20190419", end="2019/04/22")
     assert round(df.iloc[-1]["settlement"], 2) == 1074.80
@@ -270,3 +276,10 @@ def test_get_ttjj_rt_oversea():
 def test_ttjj_oversea_daily():
     df = xa.get_daily("F968054", start="2019-05-01", end="20190606")
     assert df.iloc[-1]["close"] == 10.18
+
+
+@pytest.mark.skip(reason="futu API refactor")
+def test_get_futu():
+    df = xa.get_daily("fu-03690.HK", start="2021-01-01")
+    assert df.iloc[0]["open"] == 293.4
+    df = xa.get_daily("fu-BNO.US", start="2021-01-01")

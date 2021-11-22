@@ -141,7 +141,7 @@ def set_display(env=""):
         raise ParserFailure("unknown env %s" % env)
 
 
-def PEBHistory(code, start=None, end=None):
+def PEBHistory(code, start=None, end=None, **kwargs):
     """
     历史估值分析工具箱
 
@@ -155,13 +155,13 @@ def PEBHistory(code, start=None, end=None):
     :return: some object of PEBHistory class
     """
     if code.startswith("SH000") or code.startswith("SZ399"):
-        return IndexPEBHistory(code, start, end)
+        return IndexPEBHistory(code, start, end, **kwargs)
     elif code.startswith("F"):
-        return FundPEBHistory(code, start, end)
+        return FundPEBHistory(code, start, end, **kwargs)
     elif code.startswith("8"):
-        return SWPEBHistory(code, start, end)
+        return SWPEBHistory(code, start, end, **kwargs)
     else:
-        return StockPEBHistory(code, start, end)
+        return StockPEBHistory(code, start, end, **kwargs)
 
 
 class IndexPEBHistory:
@@ -192,7 +192,7 @@ class IndexPEBHistory:
 
     # 聚宽数据源支持的指数列表： https://www.joinquant.com/indexData
 
-    def __init__(self, code, start=None, end=None):
+    def __init__(self, code, start=None, end=None, **kwargs):
         """
 
         :param code: str. 形式可以是 399971.XSHE 或者 SH000931
@@ -220,7 +220,7 @@ class IndexPEBHistory:
         self.start = start
         if not end:
             end = yesterday_str
-        self.df = xu.get_daily("peb-" + self.scode, start=self.start, end=end)
+        self.df = xu.get_daily("peb-" + self.scode, start=self.start, end=end, **kwargs)
         self.ratio = None
         self.title = "指数"
         self._gen_percentile()
@@ -335,7 +335,7 @@ class StockPEBHistory(IndexPEBHistory):
     个股历史估值封装
     """
 
-    def __init__(self, code, start=None, end=None):
+    def __init__(self, code, start=None, end=None, **kwargs):
         """
 
         :param code: 801180 申万行业指数
@@ -349,7 +349,7 @@ class StockPEBHistory(IndexPEBHistory):
         if not start:
             start = "2012-01-01"
         self.start = start
-        self.df = xu.get_daily("peb-" + code, start=start, end=end)
+        self.df = xu.get_daily("peb-" + code, start=start, end=end, **kwargs)
         self.name = get_rt(code)["name"]
         self.ratio = 1
         self.title = "个股"
@@ -361,7 +361,7 @@ class FundPEBHistory(IndexPEBHistory):
     基金历史估值封装
     """
 
-    def __init__(self, code, start=None, end=None):
+    def __init__(self, code, start=None, end=None, **kwargs):
         self.code = code
         self.scode = code
         if not end:
@@ -369,7 +369,7 @@ class FundPEBHistory(IndexPEBHistory):
         if not start:
             start = "2016-01-01"  # 基金历史通常比较短
         self.start = start
-        self.df = xu.get_daily("peb-" + code, start=start, end=end)
+        self.df = xu.get_daily("peb-" + code, start=start, end=end, **kwargs)
         self.name = get_rt(code)["name"]
         self.title = "基金"
         self.ratio = None
@@ -415,7 +415,7 @@ class SWPEBHistory(IndexPEBHistory):
         "801150",
     ]
 
-    def __init__(self, code, start=None, end=None):
+    def __init__(self, code, start=None, end=None, **kwargs):
         """
 
         :param code: 801180 申万行业指数
@@ -429,7 +429,7 @@ class SWPEBHistory(IndexPEBHistory):
         if not start:
             start = "2012-01-01"
         self.start = start
-        self.df = xu.get_daily("sw-" + code, start=start, end=end)
+        self.df = xu.get_daily("sw-" + code, start=start, end=end, **kwargs)
         self.name = self.df.iloc[0]["name"]
         self.ratio = 1
         self.title = "申万行业指数"
@@ -441,14 +441,14 @@ class TEBHistory:
     指数总盈利和总净资产变化的分析工具箱
     """
 
-    def __init__(self, code, start=None, end=None):
+    def __init__(self, code, start=None, end=None, **kwargs):
         """
 
         :param code: str. 指数代码，eg. SH000016
         :param start:
         :param end:
         """
-        df = xu.get_daily("teb-" + code, start=start, end=end)
+        df = xu.get_daily("teb-" + code, start=start, end=end, **kwargs)
         df["e"] = pd.to_numeric(df["e"])
         df["b"] = pd.to_numeric(df["b"])
         df["lnb"] = df["b"].apply(lambda s: np.log(s))
@@ -765,13 +765,27 @@ class CBCalculator:
         r.encoding = "utf-8"
         b = BeautifulSoup(r.text, "lxml")
         self.rlist = [
-            float(re.search(r"[\D]*([\d]*.[\d]*)[\s]*\%", s).group(1))
+            float(re.search(r"[\D]*([\d]*.[\d]*)[\s]*[\%]*", s).group(1))
             for s in re.split("、|，", b.select("td[id=cpn_desc]")[0].string)
         ]
-        self.rlist.append(float(b.select("td[id=redeem_price]")[0].string))
+        td_redeem_price = b.select("td[id=redeem_price]")[0]
+        if td_redeem_price.sup:
+            redeem_price = float(
+                re.match(
+                    r"\S+，合计到期赎回价(\d\d\d\.\d\d)元", td_redeem_price.sup["title"]
+                ).group(1)
+            )
+            logger.info(
+                "{}: redeem_price {} obtained from superscript".format(
+                    code, redeem_price
+                )
+            )
+        else:
+            redeem_price = float(td_redeem_price.string)
+        self.rlist.append(redeem_price)
         self.rlist[-1] -= self.rlist[-2]  # 最后一年不含息返多少
         self.scode = (
-            b.select("td[class=jisilu_nav]")[0].contents[1].string.split("-")[1].strip()
+            b.select("td[class=jisilu_nav]")[0].contents[1].text.split("-")[1].strip()
         )
         self.scode = ttjjcode(self.scode)  # 标准化股票代码
         if not zgj:
@@ -815,7 +829,7 @@ class CBCalculator:
         ) * np.sqrt(244)
         if not self.refvolatility:
             self.volatility = 0.17
-            if self.rating in ["A-", "A", "A+"]:
+            if self.rating in ["A-", "A", "A+"] or self.rating.startswith("B"):
                 self.volatility = 0.25
             elif self.rating in ["AA-"]:
                 self.volatility = 0.2
@@ -841,9 +855,9 @@ class CBCalculator:
         ).days
         if not self.refbondrate:
             ratestable = get_bond_rates(self.rating, self.date_obj.strftime("%Y-%m-%d"))
-            if self.rating in ["A", "A+", "AA-"]:
+            if self.rating in ["A", "A+", "AA-"] or self.rating.startswith("B"):
                 ## AA 到 AA- 似乎是利率跳高的一个坎
-                cutoff = 2
+                cutoff = 3  # changed from 2 by considering more credit risk
             else:
                 cutoff = 4
             if self.days / 365 > cutoff:
@@ -1020,7 +1034,7 @@ def get_market(code):
             return "CM"  # china money 中间价市场标记
         elif code.startswith("HK") and code[2:].isdigit():
             return "HK"
-        market = get_rt(code)["market"]
+        market = get_rt(code).get("market", None)
         if market is None:
             market = get_currency(code)
             market = trans.get(market, market)
@@ -1039,7 +1053,7 @@ def get_alt(code):
     """
     if code in alt_info:
         return alt_info[code]
-    elif len(code[1:].split("/")) == 2:
+    elif len(code[1:].split("/")) == 2 and len(code.split("/")[-1]) > 6:
         return "INA-" + code  # 英为 app 源替代网页源
     elif code.startswith("SP") and code[2:].isdigit():
         return "SPC" + code[2:]  # 中国区标普源替代美国源

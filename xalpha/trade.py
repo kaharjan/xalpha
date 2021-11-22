@@ -376,6 +376,8 @@ class trade:
                     feelabel = feelabel - 0.5
                     if abs(feelabel) < 1e-4:
                         feelabel = 0
+                    else:
+                        feelabel *= 100
                 else:
                     feelabel = None
                 value = int(value * 100) / 100
@@ -441,6 +443,7 @@ class trade:
 
                 if value > 0:  # value stands for purchase money
                     feelabel = 100 * value - int(100 * value)
+
                     if int(10 * feelabel) == 5:
                         feelabel = (feelabel - 0.5) * 100
                     else:
@@ -751,7 +754,7 @@ class itrade(trade):
             ):
                 self.type_ = "场内基金"
             elif code.startswith("SH11") or code.startswith("SZ12"):
-                if self.name.endswith("转债"):
+                if self.name.endswith("转债") or self.name.endswith("转2"):
                     self.type_ = "可转债"
                 else:
                     self.type_ = "债券"
@@ -774,15 +777,21 @@ class itrade(trade):
         d = {"date": [], "cash": [], "share": []}
         for _, r in self.status.iterrows():
             d["date"].append(r.date)
+
             if r.share == 0:
                 d["cash"].append(-r.value)
                 d["share"].append(0)
-            elif r.value == 0:
-                d["cash"].append(0)
-                d["share"].append(r.share)  # 直接记录总的应增加+或减少的份额数
             else:
-                d["cash"].append(-r.value * r.share - abs(r.fee))  # 手续费总是正的，和买入同号
-                d["share"].append(r.share)
+                if r.value < 0:
+                    r.value = xu.get_daily(
+                        self.code, end=r.date.strftime("%Y-%m-%d"), prev=15
+                    ).iloc[-1]["close"]
+                if r.value == 0:
+                    d["cash"].append(0)
+                    d["share"].append(r.share)  # 直接记录总的应增加+或减少的份额数
+                else:
+                    d["cash"].append(-r.value * r.share - abs(r.fee))  # 手续费总是正的，和买入同号
+                    d["share"].append(r.share)
         self.cftable = pd.DataFrame(d)
 
     def get_netvalue(self, date=yesterdayobj()):

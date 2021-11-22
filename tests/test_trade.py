@@ -147,6 +147,12 @@ def test_policy_scheduled():
         pd.date_range("2015-07-01", "2018-07-01", freq="M"),
         [(0.9, 2), (1.2, 1)],
     )
+    auto3 = xa.policy.scheduled_window(
+        cm,
+        1000,
+        pd.date_range("2015-07-01", "2018-07-01", freq="M"),
+        [(-1, 2), (1.5, 1)],
+    )
 
 
 def test_policy_grid():
@@ -176,7 +182,10 @@ def test_policy_indicator_points():
         buylow=False,
     )
     zz500_t = xa.trade(zz500, st.status)
-    assert zz500_t.dailyreport("2018-05-01").iloc[0].loc["基金收益总额"] == -6302.26
+    assert (
+        zz500_t.dailyreport("2018-05-01").iloc[0].loc["基金收益总额"] == -6302.32
+    )  # -6302.26
+    # still confused about this, seems to be a data source change, as old commits gives new results as well
 
 
 def test_record_list():
