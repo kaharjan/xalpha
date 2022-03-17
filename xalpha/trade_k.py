@@ -16,10 +16,6 @@ from xalpha.exceptions import ParserFailure, TradeBehaviorError
 from xalpha.record import irecord
 import xalpha.universal as xu
 from xalpha.universal import get_rt
-from pyecharts.commons.utils import JsCode  #kahar in order to
-#display the value on the chart when move the mouse but failed
-
-
 logger = logging.getLogger(__name__)
 
 
@@ -207,6 +203,8 @@ def vtradecost(
     """
     funddata = []
     costdata = []
+    cashdata = [] #kahar add in order to observe the sum of the cash
+    funddata_test = []
     pprice = self.price[self.price["date"] <= end]
     pcftable = cftable
     if start is not None:
@@ -215,12 +213,15 @@ def vtradecost(
     for _, row in pprice.iterrows():
         date = row["date"]
         funddata.append(row["netvalue"])
+        funddata_test.append(3.2)
         if unitcost:
             cost = 0
+            cash = 0
             if (date - self.cftable.iloc[0].date).days >= 0:
                 cost = self.unitcost(date)
+                cash = self.get_datecashvalue(date)
             costdata.append(cost)
-
+            cashdata.append(cash/1000000.0)
     coords = []
     # pcftable = pcftable[abs(pcftable["cash"]) > threhold]
     for i, r in pcftable.iterrows():
@@ -243,21 +244,27 @@ def vtradecost(
             coord=[x.date(), y],
             itemstyle_opts=opts.ItemStyleOpts(color=color),
             # this nested itemstyle_opts within MarkPointItem is only supported for pyechart>1.7.1
-            # symbol="circle",
-            symbol="pin",
+            symbol="circle",
             symbol_size=size,
         )
 
     line = Line()
 
     line.add_xaxis([d.date() for d in pprice.date])
-
+    print("costdata",costdata)
     if unitcost:
         line.add_yaxis(
             series_name="持仓成本",
             y_axis=costdata,
             is_symbol_show=False,
         )
+
+    line.add_yaxis(
+            series_name="持仓总额k6",
+            y_axis=cashdata,
+            is_symbol_show=False,
+        )
+
     line.add_yaxis(
         series_name="基金净值",
         y_axis=funddata,
@@ -645,6 +652,26 @@ class trade:
             unitcost = 0
         return unitcost
 
+
+    def get_datecashvalue(self, date=yesterdayobj()):
+        """Kahar add 20211211
+        get the current cash  of fund positions
+
+        :param date: string or object of datetime
+        :returns: float number of current cash
+        """
+        #return 5.0
+
+        partp = self.price[self.price["date"] >= self.cftable.iloc[0].date]
+        # 多基金账单时起点可能非该基金持有起点
+
+        valuedata = self.briefdailyreport(date).get("currentvalue", 0)
+
+
+        return valuedata
+
+
+
     def v_tradevolume(self, freq="D", rendered=True):
         """
         visualization on trade summary
@@ -688,470 +715,6 @@ class trade:
             return line.render_notebook()
         else:
             return line
-
-    def v_totcash(self, end=yesterdayobj(), rendered=True, vopts=None):
-        """
-        kahar 20211215 in order to observe the profit
-        visualization on the total values daily change of the aim
-        """
-        partp = self.price[self.price["date"] >= self.cftable.iloc[0].date]
-        # 多基金账单时起点可能非该基金持有起点
-        partp = partp[partp["date"] <= end]
-
-        date = [d.date() for d in partp.date]
-        valuedata = [
-            self.briefdailyreport(d).get("currentvalue", 0) for d in partp.date
-        ]
-        cashdata = [
-            self.unitcost(d)*self.briefdailyreport(d).get("currentshare")  for d in partp.date
-        ]
-        #print(cashdata)
-
-        #mark buy sell begin
-
-        pprice = self.price[self.price["date"] <= end]
-        pcftable = self.cftable
-        coords = []
-        # pcftable = pcftable[abs(pcftable["cash"]) > threhold]
-        for i, r in pcftable.iterrows():
-            coords.append([r.date, pprice[pprice["date"] <= r.date].iloc[-1]["netvalue"]])
-        print("coords:",coords)
-        upper = pcftable.cash.abs().max()
-        lower = pcftable.cash.abs().min()
-        if upper == lower:
-            upper = 2 * lower + 1  # avoid zero in denominator
-
-
-        def marker_factory(x, y):
-            buy = pcftable[pcftable["date"] <= x].iloc[-1]["cash"]
-            print("buy",buy)
-            if buy < 0:
-                color = "#ff7733"
-            else:
-
-                color = "#3366ff"
-            size = (abs(buy) - lower) / (upper - lower) * 5 + 5
-            print("size",size)
-            return opts.MarkPointItem(
-                coord=[x.date(), y],
-                itemstyle_opts=opts.ItemStyleOpts(color=color),
-            # this nested itemstyle_opts within MarkPointItem is only supported for pyechart>1.7.1
-                symbol="circle",
-                symbol_size=size,
-            )
-
-
-        #mark buy sell end
-        line = Line()
-
-        line.add_xaxis(date)
-        line.add_yaxis(series_name="持仓总值1",
-                       y_axis=valuedata,
-                       is_symbol_show=False,
-                        markpoint_opts=opts.MarkPointOpts(
-                            data=[marker_factory(*c) for c in coords],
-                            ),
-                       )
-        line.add_yaxis(series_name="现金值", y_axis=cashdata,
-                       is_symbol_show=False,
-                       markpoint_opts=opts.MarkPointOpts(
-                       data=[marker_factory(*c) for c in coords],
-                        ),
-                    )
-        #
-        line.set_global_opts(
-            datazoom_opts=[
-            opts.DataZoomOpts(
-                is_show=True, type_="slider", range_start=50, range_end=100
-            ),
-            opts.DataZoomOpts(
-                is_show=True,
-                type_="slider",
-                orient="vertical",
-                range_start=50,
-                range_end=100,
-                ),
-            ],
-            tooltip_opts=opts.TooltipOpts(
-            is_show=True,
-            trigger="axis",
-            trigger_on="mousemove",
-            axis_pointer_type="cross",
-            ),
-        )
-        if rendered:
-            return line.render_notebook()
-        else:
-            return line
-
-#####test for markpoints begin
-    def v_tradecost_ktest(
-        self, unitcost=True, start=None, end=yesterdayobj(), rendered=True
-    ):
-        """
-        visualization giving the average cost line together with netvalue line as well as buy and sell points
-
-        :returns: pyecharts.line
-        """
-        # funddata = []
-        # costdata = []
-
-        pprice = self.price[self.price["date"] <= end]
-        pcftable = self.cftable
-
-        if start is not None:
-            pprice = pprice[pprice["date"] >= start]
-            pcftable = pcftable[pcftable["date"] >= start]
-        # for _, row in pprice.iterrows():
-        #     date = row["date"]
-        #     funddata.append(row["netvalue"])
-        #     if unitcost:
-        #         cost = 0
-        #         if (date - self.cftable.iloc[0].date).days >= 0:
-        #             cost = self.unitcost(date)
-        #         costdata.append(cost)
-        #
-        coords = []
-        # pcftable = pcftable[abs(pcftable["cash"]) > threhold]
-        # for i, r in pcftable.iterrows():
-            # coords.append([r.date, pprice[pprice["date"] <= r.date].iloc[-1]["netvalue"]])
-        def marker_factory(x, y):
-            buy = pcftable[pcftable["date"] <= x].iloc[-1]["cash"]
-            print("buy",buy)
-            if buy < 0:
-                color = "#ff7733"
-            else:
-
-                color = "#3366ff"
-            size = (abs(buy) - lower) / (upper - lower) * 5 + 5
-            print("size",size)
-            return opts.MarkPointItem(
-                coord=[x.date(), y],
-                itemstyle_opts=opts.ItemStyleOpts(color=color),
-            # this nested itemstyle_opts within MarkPointItem is only supported for pyechart>1.7.1
-                symbol="circle",
-                symbol_size=size,
-            )
-
-        def marker_factory3v(x, y):
-            buy = pcftable[pcftable["date"] <= x].iloc[-1]["cash"]
-            print("buy",buy)
-            if buy < 0:
-                color = "#ff7733"
-            else:
-
-                color = "#3366ff"
-            # size = (abs(buy) - lower) / (upper - lower) * 5 + 5
-            size = len(str(buy)) * 10
-            print("size",size)
-            return opts.MarkPointItem(
-                value = -buy,
-                coord=[x.date(), y],
-                itemstyle_opts=opts.ItemStyleOpts(color=color),
-            # this nested itemstyle_opts within MarkPointItem is only supported for pyechart>1.7.1
-                # symbol="circle",
-                symbol_size=size,
-            )
-
-
-
-        coords_cash = []
-        # print("pcftable",pcftable)
-        # print("pprice",pprice)
-           #cash begin
-        cashdata = []
-        valuedata = []
-        # partp = self.price[self.price["date"] >= self.cftable.iloc[0].date]
-        # 多基金账单时起点可能非该基金持有起点
-        # partp = partp[partp["date"] <= end]
-
-        # valuedata = [
-            # self.briefdailyreport(d).get("currentvalue", 0) for d in partp.date
-            # self.briefdailyreport(d).get("currentvalue", 0) for d in pprice.date
-        # ]
-        # print(pprice.date)
-        # print("begin to cal ccost")
-        for d in pprice.date:
-            ucost = self.unitcost(d)
-            cshare = self.briefdailyreport(d).get("currentshare")
-            if(ucost is None or cshare is None  ):
-                valuedata.append(0)
-                cashdata.append(0)
-            else:
-                cashdata.append(ucost*cshare)
-                valuedata.append(self.briefdailyreport(d).get("currentvalue", 0))
-        #     # self.unitcost(d)*self.briefdailyreport(d).get("currentshare")  for d in partp.date
-        #     self.unitcost(d)*self.briefdailyreport(d).get("currentshare")  for d in pprice.date
-        # ]
-       #cash end
-
-
-      # date = [d.date() for d in partp.date]
-        date = [d.date() for d in pprice.date]
-        date_dict = {}
-        for i,d in enumerate(date):
-            date_dict[convert_date(d)]=i
-        # print("date_dict",date_dict)
-        # print("date",date)
-        # print("cashdata",cashdata)
-        # pcftable = pcftable[abs(pcftable["cash"]) > threhold]
-        # print("print offset")
-        offset = pcftable["date"]
-        # print("offset",offset)
-        offset = offset[0]
-        offsetdate = []
-        coords_markvalue = []
-        pos = 3
-        for i, r in pcftable.iterrows():
-            # print("i,r",i,r)
-            # print("r.date",type(r.date.date()))
-            # print("convert_date(r.date)",type(convert_date(r.date)))
-            # print("date_dict[r.date]",date_dict[convert_date(r.date.date())])
-
-
-            offset = r.date - offset
-
-            valuecoords = valuedata[date_dict[convert_date(r.date.date())]]
-            cashcoords = cashdata[date_dict[convert_date(r.date.date())]]
-            distance = valuecoords - cashcoords
-            if(pos == 3):
-                coords_markvalue.append([r.date,cashcoords,offset])
-                pos =0
-            elif(pos == 0 ):
-                coords_markvalue.append([r.date,cashcoords + distance/2,offset])
-                pos = 1
-            elif(pos == 1):
-                coords_markvalue.append([r.date,valuecoords,offset])
-                pos =2
-            elif(pos ==2 ):
-                coords_markvalue.append([r.date,cashcoords,offset])
-                pos = 0
-
-
-
-            # if(distance>2000):
-                # pos = 1
-                # coords_markvalue.append([r.date,cashcoords + distance/2,offset])
-            # elif(distance<-2000):
-                #coords_markvalue.append([r.date,valuecoords - distance/2,offset])
-                # coords_markvalue.append([r.date,valuecoords - distance/2,offset])
-            # else:
-                #coords_markvalue.append([r.date,valuecoords,offset])
-                # coords_markvalue.append([r.date,cashcoords,offset])
-
-            coords_cash.append([r.date, cashdata[date_dict[convert_date(r.date.date())]],offset])
-            coords.append([r.date,cashdata[date_dict[convert_date(r.date.date())]]])
-            offsetdate.append(offset)
-            offset = r.date
-        # offsetdate[0] = pd.Timedelta(1,unit = "D")
-
-        print("coords_cash",coords_cash)
-        print("len(coords_cash)",len(coords_cash))
-        # print("offsetdate",offsetdate)
-        print("len(offsetdate)",len(offsetdate))
-
-
-        upper = pcftable.cash.abs().max()
-        lower = pcftable.cash.abs().min()
-        if upper == lower:
-            upper = 2 * lower + 1  # avoid zero in denominator
-        global previous
-        global direction
-        previous = 0
-        direction = 1
-
-
-        def marker_factory1v(x, y,offsetday):
-            offset = 0
-            buy = pcftable[pcftable["date"] <= x].iloc[-1]["cash"]
-            markvalue = 0
-            ycoor = y
-            global direction
-            global previous
-            print("previous before:",previous)
-
-            # loc = (abs(buy) - lower) / (upper - lower) * 5000 + 5000
-            loc = len(str(buy)) * 1000 + 1000
-            if buy < 0:
-                color = "#ff7733"
-                markvalue = -buy
-                if(offsetday < pd.Timedelta(7,unit = "D")):
-                    offset = -100
-                    ycoor = y + loc*previous*direction
-                    previous = 1
-                    direction =-direction
-                else:
-                    previous = 0
-
-            else:
-                color = "#3366ff"
-                markvalue = -buy
-                if(offsetday < pd.Timedelta(7,unit = "D")):
-                    ycoor = y + loc*previous*direction
-                    direction = -direction
-                    previous = 1
-                else:
-                    previous = 0
-            print("previous after",previous)
-            # size = (abs(buy) - lower) / (upper - lower) * 50 + 50
-            size = len(str(buy)) * 10
-            return opts.MarkPointItem(name="test",
-                coord=[x.date(), ycoor],
-                value = -buy,
-                itemstyle_opts=opts.ItemStyleOpts(color=color),
-                # this nested itemstyle_opts within MarkPointItem is only supported for pyechart>1.7.1
-                # symbol="circle",
-                # symbol="rectangle",
-                symbol_size=size,
-            )
-        def marker_factory2v(x, y,offsetday):
-            offset = 0
-            buy = pcftable[pcftable["date"] <= x].iloc[-1]["cash"]
-            markvalue = 0
-            ycoor = y
-            global direction
-            global previous
-            print("previous before:",previous)
-            print("offsetday",offsetday)
-            print("day",x.date())
-
-            # loc = (abs(buy) - lower) / (upper - lower) * 5000 + 5000
-            loc = len(str(buy)) * 100
-            if buy < 0:
-                color = "#ff7733"
-                markvalue = -buy
-                if(offsetday < pd.Timedelta(5,unit = "D")):
-                    offset = -100
-                    #ycoor = y + loc*previous*direction
-                    ycoor = y +loc*previous*direction
-                    previous = 1
-                    direction =-direction
-                else:
-                    previous = 0
-
-            else:
-                color = "#3366ff"
-                markvalue = -buy
-                if(offsetday < pd.Timedelta(5,unit = "D")):
-                    #ycoor = y + loc*previous*direction
-                    ycoor = y + loc*previous*direction
-                    direction = -direction
-                    previous = 1
-                else:
-                    previous = 0
-            print("previous after",previous)
-            # size = (abs(buy) - lower) / (upper - lower) * 50 + 50
-            size = len(str(round(-buy))) * 12
-            return opts.MarkPointItem(name="test",
-                coord=[x.date(), ycoor],
-                value = -round(buy),
-                itemstyle_opts=opts.ItemStyleOpts(color=color),
-                # this nested itemstyle_opts within MarkPointItem is only supported for pyechart>1.7.1
-                # symbol="circle",
-                # symbol="rectangle",
-                symbol_size=size,
-            )
-
-
-        # print("getting cashdata,pprice",pprice.date)
-
-
-            # print("2cashdata",cashdata)
-        # print("funddata",funddata)
-        print("len(2chashdata)",len(cashdata))
-        # print("funddata",len(funddata))
-        # print("valuedata",valuedata)
-        print("len(valuedata)",len(valuedata))
-
-        line = Line()
-
-        #line.add_xaxis([d.date() for d in pprice.date])
-        line.add_xaxis(date)
-
-        line.add_yaxis(
-                       series_name="持仓总值1",
-                       y_axis=valuedata,
-                       # is_symbol_show=False,
-                       # )
-
-            # y_axis=funddata,
-            is_symbol_show=False,
-            markpoint_opts=opts.MarkPointOpts(
-                data=[marker_factory2v(*c) for c in coords_markvalue],
-            ),
-        )
-        line.extend_axis(
-                         yaxis = opts.AxisOpts(
-                                axislabel_opts = opts.LabelOpts(formatter="{value}%",)))
-        print("xianjinzhi")
-        line.add_yaxis(
-            series_name="现金值",
-            y_axis=cashdata,
-            is_symbol_show=False,
-            markpoint_opts=opts.MarkPointOpts(
-                # data=[marker_factory(*c) for c in coords_cash],
-                data=[marker_factory(*c) for c in coords],
-                # symbol = "circle",
-                # symbol_size =size,
-            ),
-        )
-
-        def tooltip_factory(coords):
-            for x,y in coords:
-                return opts.TooltipOpts(
-                is_show=True,
-                trigger="axis",
-                trigger_on="mousemove",
-                axis_pointer_type="cross",
-                formatter = str(y)
-            )
-
-        line.set_global_opts(
-            datazoom_opts=[
-                opts.DataZoomOpts(
-                    is_show=True, type_="slider", range_start=50, range_end=100
-                ),
-                opts.DataZoomOpts(
-                    is_show=True,
-                    type_="slider",
-                    orient="vertical",
-                    range_start=50,
-                    range_end=100,
-                ),
-            ],
-            tooltip_opts=opts.TooltipOpts(
-                is_show=True,
-                trigger="axis",
-                # trigger_on="mousemove",
-                trigger_on="click",
-                axis_pointer_type="cross",
-                # formatter = [tooltip_factory(*c) for c in coords]
-                formatter = JsCode(
-                    """function(params){
-                    if(params.dataIndex){
-                    return params.dataIndex
-                    }
-                    else{
-                    return params
-                    }
-                }
-                    """
-                )
-            ),
-            # tooltip_opts=tooltip_factory(coords)
-            # tooltip_opts=tooltip_factory(coords)
-        )
-
-        if rendered:
-            return line.render_notebook()
-
-
-
-
-##### test for markpoints end
-
-
-
 
     def __repr__(self):
         return self.name + " 交易情况"

@@ -362,7 +362,6 @@ class mul:
                     d["cash"] += row["cash_ratio"] * value / 100
                 else:
                     d["stock"] += row["stock_ratio"] * value / 100
-                    d["bond"] += row["bond_ratio"] * value / 100
                     d["cash"] += row["cash_ratio"] * value / 100
         return d
 
@@ -546,6 +545,93 @@ class mul:
         :returns: ``pyecharts.Bar()``
         """
         return vtradevolume(self.totcftable, freq=freq, rendered=rendered)
+
+    def v_xirrate(self,start_date, end_date=yesterdayobj()):
+        """
+        graph of the xirate of the over all investment
+
+        :param date: string or obj of date, show info of the date given
+        :returns:
+        """
+        start_date = convert_date(start_date)
+        end_date = convert_date(end_date)
+        columns = [
+            "基金名称",
+            "基金代码",
+            "当日净值",
+            "单位成本",
+            "持有份额",#changed to date
+            "基金现值",
+            "基金总申购",
+            "历史最大占用",
+            "基金持有成本",
+            "基金分红与赎回",
+            "换手率",
+            "基金收益总额",
+            "投资收益率",
+        ]
+        columns_tot = [
+            "基金名称",
+            "基金代码",
+            "当日净值",
+            "单位成本",
+            "持有份额",#changed to date
+            "基金现值",
+            "基金总申购",
+            "历史最大占用",
+            "基金持有成本",
+            "基金分红与赎回",
+            "换手率",
+            "基金收益总额",
+            "投资收益率",
+        ]
+        tsummarydf = pd.DataFrame([],columns=columns)
+        for date in pd.date_range(start_date,end_date):
+            summarydf = pd.DataFrame([], columns=columns)
+            for fund in self.fundtradeobj:
+                summarydf = summarydf.append(
+                    fund.dailyreport(date), ignore_index=True, sort=True
+                )
+            tname = "总计"
+            tcode = "total"
+            tunitvalue = float("NaN")
+            tunitcost = float("NaN")
+            tholdshare = date
+            tcurrentvalue = summarydf["基金现值"].sum()
+            tpurchase = summarydf["基金总申购"].sum()
+            tbtnk = bottleneck(self.totcftable[self.totcftable["date"] <= date])
+            tcost = summarydf["基金持有成本"].sum()
+            toutput = summarydf["基金分红与赎回"].sum()
+            tturnover = turnoverrate(self.totcftable[self.totcftable["date"] <= date], date)
+            # 计算的是总系统作为整体和外界的换手率，而非系统各成分之间的换手率
+            tearn = summarydf["基金收益总额"].sum()
+            trate = round(tearn / tbtnk * 100, 4)
+            trow = pd.DataFrame(
+                [
+                    [
+                        tname,
+                        tcode,
+                        tunitvalue,
+                        tunitcost,
+                        tholdshare,
+                        tcurrentvalue,
+                        tpurchase,
+                        tbtnk,
+                        tcost,
+                        toutput,
+                        tturnover,
+                        tearn,
+                        trate,
+                    ]
+                ],
+                columns=columns
+            )
+            # summarydf = summarydf.append(trow, ignore_index=True, sort=True)
+            tsummarydf = tsummarydf.append(trow, ignore_index=True, sort=True)
+
+        return tsummarydf[columns].sort_values(by="持有份额", ascending=False)
+
+
 
 
 class mulfix(mul, indicator):
