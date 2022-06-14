@@ -38,8 +38,20 @@ from xalpha.universal import (
     fetch_backend,
     save_backend,
 )
+
 import xalpha.universal as xu  ## 为了 set_backend 可以动态改变此模块的 get_daily
 from xalpha.exceptions import ParserFailure, DateMismatch, NonAccurate
+#kahar add in order to show Chinese figure title
+import matplotlib
+matplotlib.rcParams['font.sans-serif'] = ['SimHei']
+matplotlib.rcParams['font.family'] = 'sans-serif'
+#kahar add in order to draw interactive line
+import pyecharts
+from pyecharts.charts import Line,Bar
+from pyecharts import options as opts
+from pyecharts.globals import ThemeType
+from xalpha.cons import line_opts
+
 
 thismodule = sys.modules[__name__]
 
@@ -257,7 +269,90 @@ class IndexPEBHistory:
         :param y: Optional[str]. "pe" (defualt) or "pb"
         :return:
         """
-        return self.df.plot(x="date", y=y)
+        return self.df.plot(x="date", y=y,title=self.name)#kahar add title
+        # return self.df.plot(x="date", y=y)#origenal
+
+    def v2(self, y="pe"):
+        """
+        pe 或 pb 历史可视化
+        kahar to change in order to interactive
+        :param y: Optional[str]. "pe" (defualt) or "pb"
+        :return:
+        """
+        line = Line()
+        vopts = line_opts
+        # print("df",self.df)
+        x = [d.date() for d in self.df["date"]]
+        # line.add_xaxis([d.date() for d in self.df["date"]])
+        # print("x:\n{}".format(x))
+        line.add_xaxis(x)
+        line.add_yaxis(series_name=y+"  "+self.code+\
+                       self.name,y_axis=self.df[y],
+                       is_symbol_show=False)
+        line.set_global_opts(**vopts)
+        return line.render_notebook()#kahar add
+        # return self.df.plot(x="date", y=y)#origenal
+
+    def vbar(self):
+        """
+        pe 或 pb 历史可视化
+        kahar to change in order to interactive
+        :param y: Optional[str]. "pe" (defualt) or "pb"
+        :return:
+        """
+        bar = Bar()
+        vopts = line_opts
+        # print("df",self.df)
+        x = [d.date() for d in self.df["date"]]
+        pe = [p for p in self.df["pe"]]
+        pb = [p for p in self.df["pb"]]
+        # print("pe",pe)
+        # print("pb",pb)
+        # line.add_xaxis([d.date() for d in self.df["date"]])
+        # print("x:\n{}".format(x))
+        bar.add_xaxis(x)
+        bar.add_yaxis(series_name="PB  "+self.code+\
+                       self.name,yaxis_data=pb,\
+                      category_gap = '50',gap='0',label_opts = False
+                      )
+        bar.add_yaxis(series_name="PE  "+self.code+\
+                       self.name,yaxis_data=pe,\
+                      category_gap = '50',label_opts=False
+                      )
+        bar.set_series_opts(markpoint_opts=opts.MarkPointOpts(data=[
+            opts.MarkPointItem(type_='max',name='max'),
+            opts.MarkPointItem(type_='min',name='min'),
+            opts.MarkPointItem(type_='average',name='ave')]),
+                            markline_opts=opts.MarkLineOpts(data=[
+            opts.MarkLineItem(type_='max',name='max'),
+            opts.MarkLineItem(type_='min',name='min'),
+            opts.MarkLineItem(type_='average',name='ave')]))
+
+        bar.set_global_opts(title_opts=\
+                            opts.InitOpts(theme = ThemeType.DARK),\
+                            datazoom_opts = opts.DataZoomOpts())
+
+        return bar.render_notebook()#kahar add
+        # return self.df.plot(x="date", y=y)#origenal
+
+    def vall(self):
+        """
+        pe 或 pb 历史可视化
+        kahar to change in order to interactive
+        :param y: Optional[str]. "pe" (defualt) or "pb"
+        :return:
+        """
+        bar = Bar()
+        vopts = line_opts
+        # print("df",self.df)
+        x = [d.date() for d in self.df["date"]]
+        value = self.summary()
+        print("summary:",value)
+
+        return bar.render_notebook()#kahar add
+
+
+
 
     def fluctuation(self):
         if not self.ratio:

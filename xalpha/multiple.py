@@ -164,6 +164,7 @@ class mul:
             "基金分红与赎回",
             "换手率",
             "基金收益总额",
+            "xirr",
             "投资收益率",
         ]
         summarydf = pd.DataFrame([], columns=columns)
@@ -185,6 +186,12 @@ class mul:
         # 计算的是总系统作为整体和外界的换手率，而非系统各成分之间的换手率
         tearn = summarydf["基金收益总额"].sum()
         trate = round(tearn / tbtnk * 100, 4)
+        try:
+            xirr = self.xirrrate(date)
+            # print("type of xirr",type(xirr))
+            # print("xirr{}".format(xirr))
+        except:
+            xirr = float("NaN")
         trow = pd.DataFrame(
             [
                 [
@@ -200,6 +207,7 @@ class mul:
                     toutput,
                     tturnover,
                     tearn,
+                    xirr,
                     trate,
                 ]
             ],
@@ -548,7 +556,8 @@ class mul:
 
     def v_xirrate(self,start_date, end_date=yesterdayobj()):
         """
-        graph of the xirate of the over all investment
+        Kahar added function
+        table  of the xirate of the over all investment
 
         :param date: string or obj of date, show info of the date given
         :returns:
@@ -560,7 +569,7 @@ class mul:
             "基金代码",
             "当日净值",
             "单位成本",
-            "持有份额",#changed to date
+            "持有份额",
             "基金现值",
             "基金总申购",
             "历史最大占用",
@@ -568,14 +577,15 @@ class mul:
             "基金分红与赎回",
             "换手率",
             "基金收益总额",
+            "xirr",
             "投资收益率",
         ]
         columns_tot = [
-            "基金名称",
-            "基金代码",
+            # "基金名称",
+            "日期",  #chaned to date
             "当日净值",
             "单位成本",
-            "持有份额",#changed to date
+            "持有份额",
             "基金现值",
             "基金总申购",
             "历史最大占用",
@@ -583,20 +593,29 @@ class mul:
             "基金分红与赎回",
             "换手率",
             "基金收益总额",
+            "xirr",
             "投资收益率",
+            # "xirr_ave"
         ]
         tsummarydf = pd.DataFrame([],columns=columns)
-        for date in pd.date_range(start_date,end_date):
+        # print("self.fundtradeobj[0]",self.fundtradeobj[0])
+        pricedate = self.fundtradeobj[0].price["date"]
+        # print("pricedate",pricedate)
+        pprice = self.fundtradeobj[0].price[pricedate <= end_date]
+        pprice = pprice[pprice["date"]>=start_date]
+        for _, row in pprice.iterrows():
+            date = row["date"]
+       # for date in pd.date_range(start_date,end_date):
             summarydf = pd.DataFrame([], columns=columns)
             for fund in self.fundtradeobj:
                 summarydf = summarydf.append(
                     fund.dailyreport(date), ignore_index=True, sort=True
                 )
-            tname = "总计"
-            tcode = "total"
-            tunitvalue = float("NaN")
-            tunitcost = float("NaN")
-            tholdshare = date
+            # tname = "总计"
+            tcode = date
+            tunitvalue = summarydf["当日净值"].sum() # float("NaN")
+            tunitcost = summarydf["单位成本"].sum()#float("NaN")
+            tholdshare = summarydf["持有份额"].sum()
             tcurrentvalue = summarydf["基金现值"].sum()
             tpurchase = summarydf["基金总申购"].sum()
             tbtnk = bottleneck(self.totcftable[self.totcftable["date"] <= date])
@@ -606,10 +625,18 @@ class mul:
             # 计算的是总系统作为整体和外界的换手率，而非系统各成分之间的换手率
             tearn = summarydf["基金收益总额"].sum()
             trate = round(tearn / tbtnk * 100, 4)
+            try:
+                xirr = self.xirrrate(date)
+            except:
+                xirr = float("NaN")
+            # print("summarydf[xirr].count",summarydf["xirr"].count())
+
+            # except:
+            #     xirr_ave = float("NaN")
             trow = pd.DataFrame(
                 [
                     [
-                        tname,
+                        # tname,
                         tcode,
                         tunitvalue,
                         tunitcost,
@@ -621,15 +648,17 @@ class mul:
                         toutput,
                         tturnover,
                         tearn,
+                        xirr,
                         trate,
+                        # xirr_ave
                     ]
                 ],
-                columns=columns
+                columns=columns_tot
             )
             # summarydf = summarydf.append(trow, ignore_index=True, sort=True)
             tsummarydf = tsummarydf.append(trow, ignore_index=True, sort=True)
 
-        return tsummarydf[columns].sort_values(by="持有份额", ascending=False)
+        return tsummarydf[columns_tot].sort_values(by="日期", ascending=False)
 
 
 

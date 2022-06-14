@@ -16,9 +16,15 @@ from xalpha.exceptions import ParserFailure, TradeBehaviorError
 from xalpha.record import irecord
 import xalpha.universal as xu
 from xalpha.universal import get_rt
+
+#kahar add begin
 from pyecharts.commons.utils import JsCode  #kahar in order to
 #display the value on the chart when move the mouse but failed
-
+from pyecharts.globals import ThemeType
+import xalpha.toolbox
+from xalpha.toolbox import FundPEBHistory
+# from pyecharts import Overlap
+#kahar add end
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +73,9 @@ def xirrcal(cftable, trades, date, startdate=None, guess=0.01):
         else:  # 场内交易
             rede += fund.briefdailyreport(date).get("currentvalue", 0)
     cashflow.append((date, rede))
-    return xirr(cashflow, guess)
+    # print("cashflow",cashflow)
+    # return xirr(cashflow, guess)
+    return xirr(cashflow, guess)*100 #kahar changed to percentage
 
 
 def bottleneck(cftable):
@@ -95,7 +103,11 @@ def turnoverrate(cftable, end=yesterdayobj()):
     end = convert_date(end)
     start = cftable.iloc[0].date
     tradeamount = sum(abs(cftable.loc[:, "cash"]))
+    # print("tradeamount",tradeamount)
     turnover = tradeamount / bottleneck(cftable) / 2.0
+    # print("turnover",turnover)
+    # print("start",start)
+    # print("end-start",(end-start).days)
     if (end - start).days <= 0:
         return 0
     return turnover * 365 / (end - start).days
@@ -291,7 +303,144 @@ def vtradecost(
     else:
         return line
 
+#kahar add new figure start
 
+def v4lines(
+    self, cftable, unitcost=False, start=None, end=yesterdayobj(), rendered=True
+):
+    """
+    visualization giving the average cost line together with netvalue line as well as buy and sell points
+
+    :returns: pyecharts.line
+    """
+    funddata = []
+    costdata = []
+    pprice = self.price[self.price["date"] <= end]
+    pcftable = cftable
+    if start is not None:
+        pprice = pprice[pprice["date"] >= start]
+        pcftable = pcftable[pcftable["date"] >= start]
+    for _, row in pprice.iterrows():
+        date = row["date"]
+        funddata.append(row["netvalue"])
+        if unitcost:
+            cost = 0
+            if (date - self.cftable.iloc[0].date).days >= 0:
+                cost = self.unitcost(date)
+            costdata.append(cost)
+
+    coords = []
+    # pcftable = pcftable[abs(pcftable["cash"]) > threhold]
+    for i, r in pcftable.iterrows():
+        coords.append([r.date, pprice[pprice["date"] <= r.date].iloc[-1]["netvalue"]])
+
+    upper = pcftable.cash.abs().max()
+    lower = pcftable.cash.abs().min()
+    if upper == lower:
+        upper = 2 * lower + 1  # avoid zero in denominator
+    bar = Bar()
+    # print("start to FundPEBHistory")
+    pbe = FundPEBHistory("F"+self.code,end =end)
+    # print("start to add x,y")
+    x = [d.date() for d in pbe.df['date']]
+    pe = [p for p in pbe.df["pe"]]
+    pb = [p for p in pbe.df["pb"]]
+    print("pb date",x)
+
+    bar.add_xaxis(x)
+    bar.add_yaxis(series_name="PB",yaxis_data=pb,category_gap = '50',\
+                  gap = '0',label_opts = False)
+    bar.add_yaxis(series_name="PE",yaxis_data=pe,category_gap = '50',\
+                  label_opts=False)
+    bar.set_series_opts(markpoint_opts=opts.MarkPointOpts(data=[
+        opts.MarkPointItem(type_='max',name='max'),
+        opts.MarkPointItem(type_="min",name="min"),
+        opts.MarkPointItem(type_="average",name="ave")]),
+                markline_opts=opts.MarkLineOpts(data=[
+        opts.MarkLineItem(type_='max',name='max'),
+        opts.MarkLineItem(type_='min',name='min'),
+        opts.MarkLineItem(type_='average',name='ave')]))
+    bar.set_global_opts(title_opts = opts.InitOpts(theme = ThemeType.DARK),\
+                        datazoom_opts = opts.DataZoomOpts())
+    # print("bar process ended")
+
+
+
+    def marker_factory(x, y):
+        buy = pcftable[pcftable["date"] <= x].iloc[-1]["cash"]
+        if buy < 0:
+            color = "#ff7733"
+        else:
+
+            color = "#3366ff"
+        size = (abs(buy) - lower) / (upper - lower) * 5 + 5
+        return opts.MarkPointItem(
+            coord=[x.date(), y],
+            itemstyle_opts=opts.ItemStyleOpts(color=color),
+            # this nested itemstyle_opts within MarkPointItem is only supported for pyechart>1.7.1
+            symbol="circle",
+            # symbol="pin",
+            symbol_size=size,
+        )
+
+    line = Line()
+    line_x = [d.date() for d in pprice.date]
+    print("line_x date",line_x)
+
+    # line.add_xaxis([d.date() for d in pprice.date])
+    line.add_xaxis(line_x)
+
+    if unitcost:
+        line.add_yaxis(
+            series_name="持仓成本",
+            y_axis=costdata,
+            is_symbol_show=False,
+        )
+    line.add_yaxis(
+        series_name="基金净值",
+        y_axis=funddata,
+        is_symbol_show=False,
+        markpoint_opts=opts.MarkPointOpts(
+            data=[marker_factory(*c) for c in coords],
+        ),
+    )
+    line.extend_axis(yaxis = opts.AxisOpts(type_='value',position='right'))
+    line.set_global_opts(
+        # **line_opts
+        datazoom_opts=[
+            opts.DataZoomOpts(
+                is_show=True, type_="slider", range_start=50, range_end=100
+            ),
+            opts.DataZoomOpts(
+                is_show=True,
+                type_="slider",
+                orient="vertical",
+                range_start=50,
+                range_end=100,
+            ),
+        ],
+        tooltip_opts=opts.TooltipOpts(
+            is_show=True,
+            trigger="axis",
+            trigger_on="mousemove",
+            axis_pointer_type="cross",
+        ),
+    )
+    # overlap = Overlap()
+    # overlap.add(bar)
+    # overlap.add(line,\
+                # yaxis_index=1,is_add_yaxis=True)
+
+#
+    # line.overlap(bar)
+    if rendered:
+        return bar.render_notebook()
+    else:
+        return line
+
+
+
+#kahar add new figure end
 class trade:
     """
     Trade class with fundinfo obj as input and its main attrs are cftable and remtable:
@@ -538,7 +687,15 @@ class trade:
         """
         return xirrcal(self.cftable, [self], date, startdate, guess)
 
+    #kahar add xirrate
     def dailyreport(self, date=yesterdayobj()):
+        """
+        give the dailyreport,
+        xirr rate for all the trade of the aim before date (virtually sold out on date)
+
+        :param date: string or obj of datetime, the virtually sell-all date
+        """
+
         date = convert_date(date)
         partcftb = self.cftable[self.cftable["date"] <= date]
         value = self.get_netvalue(date)
@@ -554,6 +711,7 @@ class trade:
                 "历史最大占用": [0],
                 "基金分红与赎回": [0],
                 "基金收益总额": [0],
+                "xirr":[0]
             }
             df = pd.DataFrame(reportdict, columns=reportdict.keys())
             return df
@@ -578,7 +736,12 @@ class trade:
             returnrate = 0
         else:
             returnrate = round((ereturn / btnk) * 100, 4)
-
+        try:
+            xirr = self.xirrrate(date)
+            # print("daily report xirr",xirr)
+            # print("daily report xirr type",type(xirr))
+        except:
+            xirr = float("NaN")
         reportdict = {
             "基金名称": [self.name],
             "基金代码": [self.code],
@@ -592,10 +755,144 @@ class trade:
             "基金分红与赎回": [totoutput],
             "换手率": [turnover],
             "基金收益总额": [ereturn],
+            "xirr":[xirr],
             "投资收益率": [returnrate],
         }
         df = pd.DataFrame(reportdict, columns=reportdict.keys())
         return df
+
+    def yearreport(self, date=yesterdayobj(),startdate=None,onlytrade=True):
+        fund_startdate =  self.cftable["date"][0]
+
+        if not startdate:
+            startdate = fund_startdate
+        else:
+            if not isinstance(startdate, dt.datetime):
+                startdate = dt.datetime.strptime(
+                startdate.replace("-", "").replace("/", ""), "%Y%m%d"
+            )
+            if(startdate < fund_startdate):
+                startdate = fund_startdate
+
+        date = convert_date(date)
+        partcftba = self.cftable[self.cftable["date"] <= date]
+        partcftba = partcftba[partcftba["date"]>=startdate]
+        value = self.get_netvalue(date)
+
+        if len(partcftba) == 0:
+            reportdict = {
+                "基金名称": [self.name],
+                "基金代码": [self.code],
+                "当日净值": [value],
+                "持有份额": [0],
+                "基金现值": [0],
+                "基金总申购": [0],
+                "历史最大占用": [0],
+                "基金分红与赎回": [0],
+                "基金收益总额": [0],
+                "投资收益率":[0],
+                "xirrate" :[0]
+            }
+            df = pd.DataFrame(reportdict, columns=reportdict.keys())
+            return df
+        columns = [
+            # "基金名称": [self.name],
+            # "基金代码": [self.code],
+                "日期",
+                "当日净值",
+                "单位成本",
+                "持有份额",
+                "基金现值",
+                "基金总申购",
+                "历史最大占用",
+                "基金持有成本",
+                "基金分红与赎回",
+                "换手率",
+                "基金收益总额",
+                "投资收益率",
+                "xirrate",
+         ]
+        df = pd.DataFrame([],columns = columns )
+        # print("befor func",len(df))
+
+        def get_report(table,df):
+
+            for _, row in table.iterrows():
+            # totinput = myround(-sum(partcftb.loc[:,'cash']))
+            # for d in pd.date_range(start_date,date):
+                d = row["date"]
+                # partcftb = self.cftable[self.cftable["date"]<=d]
+                partcftb = partcftba[partcftba["date"]<=d]
+                value = self.get_netvalue(d)
+
+                totinput = myround(
+                    -sum([row["cash"] for _, row in partcftb.iterrows() if row["cash"] < 0])
+                )
+                totoutput = myround(
+                    sum([row["cash"] for _, row in partcftb.iterrows() if row["cash"] > 0])
+                )
+
+                currentshare = myround(sum(partcftb.loc[:, "share"]))
+                currentcash = myround(currentshare * value)
+                btnk = bottleneck(partcftb)
+                turnover = turnoverrate(partcftb, date)
+                ereturn = myround(currentcash + totoutput - totinput)
+                if currentshare == 0:
+                    unitcost = 0
+                else:
+                    unitcost = round((totinput - totoutput) / currentshare, 4)
+                if btnk == 0:
+                    returnrate = 0
+                else:
+                    returnrate = round((ereturn / btnk) * 100, 4)
+                try:
+                    xirrate = self.xirrrate(date = d,startdate=startdate)
+                except:
+                    xirrate = float("NaN")
+
+                reportdict = {
+                # "基金名称": [self.name],
+                # "基金代码": [self.code],
+                    "日期": d,
+                    "当日净值": value,
+                    "单位成本": unitcost,
+                    "持有份额": currentshare,
+                    "基金现值": currentcash,
+                    "基金总申购": totinput,
+                    "历史最大占用": btnk,
+                    "基金持有成本": totinput - totoutput,
+                    "基金分红与赎回": totoutput,
+                    "换手率": turnover,
+                    "基金收益总额": ereturn,
+                    "投资收益率": returnrate,
+                    "xirrate" :xirrate
+                }
+                # df = pd.DataFrame(reportdict, columns=reportdict.keys())
+                df = df.append(reportdict,ignore_index=True)
+            # print("after for ",len(df))
+
+            return df
+        #is
+        pprice = self.price[self.price["date"] <= date]
+        pprice = pprice[pprice["date"] >= startdate]
+
+        if(onlytrade == True):
+            # print("pprice type",type(pprice))
+            last_table = pprice.tail(1)
+            df = get_report(partcftba,df)
+            # get_report(partcftb)
+            # print("last_table",last_table)
+            # print("after func def len",len(df))
+            df = get_report(last_table,df)
+            # print("after 2 call df",len(df))
+
+        else:
+            pprice = self.price[self.price["date"] <= date]
+            pprice = pprice[pprice["date"] >= startdate]
+            df =df.append(get_report(pprice,df))
+        return df
+
+
 
     def get_netvalue(self, date=yesterdayobj()):
         df = self.price[self.price["date"] <= date]
@@ -664,6 +961,20 @@ class trade:
             self, self.cftable, unitcost=True, start=start, end=end, rendered=rendered
         )
 
+
+    def v_4lines(self, start=None, end=yesterdayobj(), rendered=True):
+        """
+        visualization giving the average cost line together with netvalue linae
+        PE,PB
+
+        :returns: pyecharts.line
+        """
+        return v4lines(
+            self, self.cftable, unitcost=True, start=start, end=end, rendered=rendered
+        )
+
+
+
     def v_totvalue(self, end=yesterdayobj(), rendered=True, vopts=None):
         """
         visualization on the total values daily change of the aim
@@ -715,7 +1026,7 @@ class trade:
         # pcftable = pcftable[abs(pcftable["cash"]) > threhold]
         for i, r in pcftable.iterrows():
             coords.append([r.date, pprice[pprice["date"] <= r.date].iloc[-1]["netvalue"]])
-        print("coords:",coords)
+        # print("coords:",coords)
         upper = pcftable.cash.abs().max()
         lower = pcftable.cash.abs().min()
         if upper == lower:
@@ -724,14 +1035,14 @@ class trade:
 
         def marker_factory(x, y):
             buy = pcftable[pcftable["date"] <= x].iloc[-1]["cash"]
-            print("buy",buy)
+            # print("buy",buy)
             if buy < 0:
                 color = "#ff7733"
             else:
 
                 color = "#3366ff"
             size = (abs(buy) - lower) / (upper - lower) * 5 + 5
-            print("size",size)
+            # print("size",size)
             return opts.MarkPointItem(
                 coord=[x.date(), y],
                 itemstyle_opts=opts.ItemStyleOpts(color=color),
@@ -793,8 +1104,6 @@ class trade:
 
         :returns: pyecharts.line
         """
-        # funddata = []
-        # costdata = []
 
         pprice = self.price[self.price["date"] <= end]
         pcftable = self.cftable
@@ -802,29 +1111,18 @@ class trade:
         if start is not None:
             pprice = pprice[pprice["date"] >= start]
             pcftable = pcftable[pcftable["date"] >= start]
-        # for _, row in pprice.iterrows():
-        #     date = row["date"]
-        #     funddata.append(row["netvalue"])
-        #     if unitcost:
-        #         cost = 0
-        #         if (date - self.cftable.iloc[0].date).days >= 0:
-        #             cost = self.unitcost(date)
-        #         costdata.append(cost)
-        #
+
         coords = []
-        # pcftable = pcftable[abs(pcftable["cash"]) > threhold]
-        # for i, r in pcftable.iterrows():
-            # coords.append([r.date, pprice[pprice["date"] <= r.date].iloc[-1]["netvalue"]])
         def marker_factory(x, y):
             buy = pcftable[pcftable["date"] <= x].iloc[-1]["cash"]
-            print("buy",buy)
+            # print("buy",buy)
             if buy < 0:
                 color = "#ff7733"
             else:
 
                 color = "#3366ff"
             size = (abs(buy) - lower) / (upper - lower) * 5 + 5
-            print("size",size)
+            # print("size",size)
             return opts.MarkPointItem(
                 coord=[x.date(), y],
                 itemstyle_opts=opts.ItemStyleOpts(color=color),
@@ -833,44 +1131,11 @@ class trade:
                 symbol_size=size,
             )
 
-        def marker_factory3v(x, y):
-            buy = pcftable[pcftable["date"] <= x].iloc[-1]["cash"]
-            print("buy",buy)
-            if buy < 0:
-                color = "#ff7733"
-            else:
-
-                color = "#3366ff"
-            # size = (abs(buy) - lower) / (upper - lower) * 5 + 5
-            size = len(str(buy)) * 10
-            print("size",size)
-            return opts.MarkPointItem(
-                value = -buy,
-                coord=[x.date(), y],
-                itemstyle_opts=opts.ItemStyleOpts(color=color),
-            # this nested itemstyle_opts within MarkPointItem is only supported for pyechart>1.7.1
-                # symbol="circle",
-                symbol_size=size,
-            )
-
-
 
         coords_cash = []
-        # print("pcftable",pcftable)
-        # print("pprice",pprice)
-           #cash begin
+        #cash begin kahar
         cashdata = []
         valuedata = []
-        # partp = self.price[self.price["date"] >= self.cftable.iloc[0].date]
-        # 多基金账单时起点可能非该基金持有起点
-        # partp = partp[partp["date"] <= end]
-
-        # valuedata = [
-            # self.briefdailyreport(d).get("currentvalue", 0) for d in partp.date
-            # self.briefdailyreport(d).get("currentvalue", 0) for d in pprice.date
-        # ]
-        # print(pprice.date)
-        # print("begin to cal ccost")
         for d in pprice.date:
             ucost = self.unitcost(d)
             cshare = self.briefdailyreport(d).get("currentshare")
@@ -880,37 +1145,20 @@ class trade:
             else:
                 cashdata.append(ucost*cshare)
                 valuedata.append(self.briefdailyreport(d).get("currentvalue", 0))
-        #     # self.unitcost(d)*self.briefdailyreport(d).get("currentshare")  for d in partp.date
-        #     self.unitcost(d)*self.briefdailyreport(d).get("currentshare")  for d in pprice.date
-        # ]
        #cash end
 
 
-      # date = [d.date() for d in partp.date]
         date = [d.date() for d in pprice.date]
         date_dict = {}
         for i,d in enumerate(date):
             date_dict[convert_date(d)]=i
-        # print("date_dict",date_dict)
-        # print("date",date)
-        # print("cashdata",cashdata)
-        # pcftable = pcftable[abs(pcftable["cash"]) > threhold]
-        # print("print offset")
         offset = pcftable["date"]
-        # print("offset",offset)
         offset = offset[0]
         offsetdate = []
         coords_markvalue = []
         pos = 3
         for i, r in pcftable.iterrows():
-            # print("i,r",i,r)
-            # print("r.date",type(r.date.date()))
-            # print("convert_date(r.date)",type(convert_date(r.date)))
-            # print("date_dict[r.date]",date_dict[convert_date(r.date.date())])
-
-
             offset = r.date - offset
-
             valuecoords = valuedata[date_dict[convert_date(r.date.date())]]
             cashcoords = cashdata[date_dict[convert_date(r.date.date())]]
             distance = valuecoords - cashcoords
@@ -927,29 +1175,15 @@ class trade:
                 coords_markvalue.append([r.date,cashcoords,offset])
                 pos = 0
 
-
-
-            # if(distance>2000):
-                # pos = 1
-                # coords_markvalue.append([r.date,cashcoords + distance/2,offset])
-            # elif(distance<-2000):
-                #coords_markvalue.append([r.date,valuecoords - distance/2,offset])
-                # coords_markvalue.append([r.date,valuecoords - distance/2,offset])
-            # else:
-                #coords_markvalue.append([r.date,valuecoords,offset])
-                # coords_markvalue.append([r.date,cashcoords,offset])
-
             coords_cash.append([r.date, cashdata[date_dict[convert_date(r.date.date())]],offset])
             coords.append([r.date,cashdata[date_dict[convert_date(r.date.date())]]])
             offsetdate.append(offset)
             offset = r.date
-        # offsetdate[0] = pd.Timedelta(1,unit = "D")
 
-        print("coords_cash",coords_cash)
-        print("len(coords_cash)",len(coords_cash))
+        # print("coords_cash",coords_cash)
+        # print("len(coords_cash)",len(coords_cash))
         # print("offsetdate",offsetdate)
-        print("len(offsetdate)",len(offsetdate))
-
+        # print("len(offsetdate)",len(offsetdate))
 
         upper = pcftable.cash.abs().max()
         lower = pcftable.cash.abs().min()
@@ -960,50 +1194,6 @@ class trade:
         previous = 0
         direction = 1
 
-
-        def marker_factory1v(x, y,offsetday):
-            offset = 0
-            buy = pcftable[pcftable["date"] <= x].iloc[-1]["cash"]
-            markvalue = 0
-            ycoor = y
-            global direction
-            global previous
-            print("previous before:",previous)
-
-            # loc = (abs(buy) - lower) / (upper - lower) * 5000 + 5000
-            loc = len(str(buy)) * 1000 + 1000
-            if buy < 0:
-                color = "#ff7733"
-                markvalue = -buy
-                if(offsetday < pd.Timedelta(7,unit = "D")):
-                    offset = -100
-                    ycoor = y + loc*previous*direction
-                    previous = 1
-                    direction =-direction
-                else:
-                    previous = 0
-
-            else:
-                color = "#3366ff"
-                markvalue = -buy
-                if(offsetday < pd.Timedelta(7,unit = "D")):
-                    ycoor = y + loc*previous*direction
-                    direction = -direction
-                    previous = 1
-                else:
-                    previous = 0
-            print("previous after",previous)
-            # size = (abs(buy) - lower) / (upper - lower) * 50 + 50
-            size = len(str(buy)) * 10
-            return opts.MarkPointItem(name="test",
-                coord=[x.date(), ycoor],
-                value = -buy,
-                itemstyle_opts=opts.ItemStyleOpts(color=color),
-                # this nested itemstyle_opts within MarkPointItem is only supported for pyechart>1.7.1
-                # symbol="circle",
-                # symbol="rectangle",
-                symbol_size=size,
-            )
         def marker_factory2v(x, y,offsetday):
             offset = 0
             buy = pcftable[pcftable["date"] <= x].iloc[-1]["cash"]
@@ -1011,9 +1201,9 @@ class trade:
             ycoor = y
             global direction
             global previous
-            print("previous before:",previous)
-            print("offsetday",offsetday)
-            print("day",x.date())
+            # print("previous before:",previous)
+            # print("offsetday",offsetday)
+            # print("day",x.date())
 
             # loc = (abs(buy) - lower) / (upper - lower) * 5000 + 5000
             loc = len(str(buy)) * 100
@@ -1039,7 +1229,7 @@ class trade:
                     previous = 1
                 else:
                     previous = 0
-            print("previous after",previous)
+            # print("previous after",previous)
             # size = (abs(buy) - lower) / (upper - lower) * 50 + 50
             size = len(str(round(-buy))) * 12
             return opts.MarkPointItem(name="test",
@@ -1058,10 +1248,10 @@ class trade:
 
             # print("2cashdata",cashdata)
         # print("funddata",funddata)
-        print("len(2chashdata)",len(cashdata))
+        # print("len(2chashdata)",len(cashdata))
         # print("funddata",len(funddata))
         # print("valuedata",valuedata)
-        print("len(valuedata)",len(valuedata))
+        # print("len(valuedata)",len(valuedata))
 
         line = Line()
 
@@ -1069,7 +1259,7 @@ class trade:
         line.add_xaxis(date)
 
         line.add_yaxis(
-                       series_name="持仓总值1",
+                       series_name="持仓总值",
                        y_axis=valuedata,
                        # is_symbol_show=False,
                        # )
@@ -1083,7 +1273,7 @@ class trade:
         line.extend_axis(
                          yaxis = opts.AxisOpts(
                                 axislabel_opts = opts.LabelOpts(formatter="{value}%",)))
-        print("xianjinzhi")
+        # print("xianjinzhi")
         line.add_yaxis(
             series_name="现金值",
             y_axis=cashdata,

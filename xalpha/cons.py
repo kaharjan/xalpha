@@ -656,7 +656,14 @@ def xirr(cashflows, guess=0.1):
         as a starting point for the numerical solution
     :returns: the IRR as a single floating number
     """
-    return optimize.newton(lambda r: xnpv(r, cashflows), guess)
+    #kahar revise the code
+    # return optimize.newton(lambda r: xnpv(r, cashflows), guess)
+    result =  optimize.newton(lambda r: xnpv(r, cashflows), guess)
+    if not isinstance(result,complex):
+        return result
+    else:
+        return float("NaN")
+
 
 
 def myround(num, label=1):
