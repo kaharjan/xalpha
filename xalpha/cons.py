@@ -62,7 +62,8 @@ opendate = list(caldate[caldate["is_open"] == 1]["cal_date"])
 opendate_set = set(opendate)  # for speed checking?
 
 # fund code list which always round down for the purchase share approximation
-droplist = ["003318", "000311", "000601", "009989","007531"]
+droplist = ["003318", "000311", "000601", "009989","007531","217002","003298",
+            "003299"]
 
 sqrt_days_in_year = sqrt(250.0)
 
