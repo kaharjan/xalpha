@@ -67,7 +67,7 @@ opendate_set = set(opendate)  # for speed checking?
 
 # fund code list which always round down for the purchase share approximation
 droplist = ["003318", "000311", "000601", "009989","007531","217002","003298",
-            "003299"]
+            "003299","007340","003634","007490","003956","004070","004224"]
 
 sqrt_days_in_year = sqrt(250.0)
 
