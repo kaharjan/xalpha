@@ -347,7 +347,7 @@ def v4lines(
     x = [d.date() for d in pbe.df['date']]
     pe = [p for p in pbe.df["pe"]]
     pb = [p for p in pbe.df["pb"]]
-    print("pb date",x)
+    # print("pb date",x)
 
     bar.add_xaxis(x)
     bar.add_yaxis(series_name="PB",yaxis_data=pb,category_gap = '50',\
