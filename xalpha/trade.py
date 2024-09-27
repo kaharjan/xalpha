@@ -387,7 +387,7 @@ def v4lines(
 
     line = Line()
     line_x = [d.date() for d in pprice.date]
-    print("line_x date",line_x)
+    # print("line_x date",line_x)
 
     # line.add_xaxis([d.date() for d in pprice.date])
     line.add_xaxis(line_x)
