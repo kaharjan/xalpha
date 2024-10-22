@@ -142,7 +142,11 @@ def get_token():
     :return:
     """
     r = rget("https://xueqiu.com", headers={"user-agent": "Mozilla"})
-    return {"xq_a_token": r.cookies["xq_a_token"],"u": r.cookies["u"]}
+    #kahar add xq_a_token or not able to retrive data from xueqiu
+    # return {"xq_a_token": r.cookies["xq_a_token"],"u": r.cookies["u"]}
+    # return  {"xq_a_token":"dbc1dc6d13bd101dd06f18c5b7f2fb2eb276fb5a","u":"971727501440946"}
+    #from xueqiu website : xq_a_token and cookiesu
+    return  {"xq_a_token":"f84a0b79c9e449cb1003cb36412faa34001a6697","u":"971727501440946"}
 
 
 def get_historical_fromxq(code, count, type_="before", full=False):

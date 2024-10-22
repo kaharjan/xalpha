@@ -19,6 +19,7 @@ from xalpha.trade import (
     trade,
     turnoverrate,
     vtradevolume,
+    vtradevolume_buysell,#added buy kahar
     xirrcal,
     itrade,
     vtradecost,
@@ -128,6 +129,7 @@ class mul:
                     fundtradeobj.append(itrade(code, istatus))
         self.fundtradeobj = tuple(fundtradeobj)
         self.totcftable = self._mergecftb()
+        # self.totdatecftable = self._mergedatecftb() #added by kahar
 
     def tot(self, prop="基金现值", date=yesterdayobj()):
         """
@@ -239,6 +241,31 @@ class mul:
         df = df[df["cash"] != 0]
         df = df.reset_index(drop=True)
         return df
+    def _mergedatecftb(self):
+        """
+        merge the different cftable for different funds into one table
+        but don't sum the same day cash
+        modified by kahar
+        """
+        dtlist = []
+        for fund in self.fundtradeobj:
+            dtlist2 = []
+            for _, row in fund.cftable.iterrows():
+                dtlist2.append((row["date"], row["cash"]))
+            dtlist.extend(dtlist2)
+        # print("dtlist",dtlist)
+        # nndtlist = set([item[0] for item in dtlist])
+        nndtlist = [item[0] for item in dtlist]
+        # nndtlist = sorted(list(nndtlist), key=lambda x: x)
+        reslist = []
+        reslist = [item[1] for item in dtlist]
+        # for date in nndtlist:
+            # reslist.append(sum([item[1] for item in dtlist if item[0] == date]))
+        df = pd.DataFrame(data={"date": nndtlist, "cash": reslist})
+        df = df[df["cash"] != 0]
+        df = df.reset_index(drop=True)
+        return df
+
 
     def xirrrate(self, date=yesterdayobj(), startdate=None, guess=0.01):
         """
@@ -553,6 +580,17 @@ class mul:
         :returns: ``pyecharts.Bar()``
         """
         return vtradevolume(self.totcftable, freq=freq, rendered=rendered)
+
+    def v_tradevolume_buysell(self, freq="D", rendered=True):
+        """
+        visualization on trade summary of the funds combination modified by kahar
+
+        :param freq: one character string, frequency label, now supporting D for date,
+            W for week and M for month, namely the trade volume is shown based on the time unit
+        :returns: ``pyecharts.Bar()``
+        """
+        return vtradevolume_buysell(self._mergedatecftb(), freq=freq, rendered=rendered)
+
 
     def v_xirrate(self,start_date, end_date=yesterdayobj()):
         """

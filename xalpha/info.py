@@ -277,9 +277,16 @@ year={year}&month={month}".format(
         for l in main:
             result["code"].append(l[icode])
             result["name"].append(l[iname])
-            result["ratio"].append(float(l[iratio][:-1]))
-            result["share"].append(_float(l[ishare]))
-            result["value"].append(_float(l[ivalue]))
+            # result["ratio"].append(float(l[iratio][:-1]))  #solve
+            # the problem:
+            # could not convert string to float:'3,902
+            result["ratio"].append(float(l[iratio][:-1].replace(",","")))
+            # result["share"].append(_float(l[ishare])) #solve the problem:
+            #list index out of range
+            # if len(l)>ishare
+            result["share"].append(_float(l[ishare] if len(l) > ishare else 0))
+            # result["value"].append(_float(l[ivalue]))
+            result["value"].append(_float( l[ivalue] if len(l) > ivalue else 0))
     elif category == "zqcc":
         result = {"code": [], "name": [], "ratio": [], "value": []}
         for l in main:

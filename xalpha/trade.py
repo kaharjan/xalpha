@@ -208,6 +208,181 @@ def vtradevolume(cftable, freq="D", rendered=True):
     else:
         return bar
 
+def vtradevolume_buysell(cftable, freq="D", rendered=True):
+    """
+    aid function on visualization of trade summary modified by kahar
+
+    :param cftable: cftable (pandas.DataFrame) with at least date and cash columns
+    :param freq: one character string, frequency label, now supporting D for date,
+        W for week and M for month, namely the trade volume is shown based on the time unit
+    :returns: the Bar object
+    """
+    ### WARN: datazoom and time conflict, sliding till 1970..., need further look into pyeacharts
+    startdate = cftable.iloc[0]["date"]
+    cftable_buy = cftable.query("cash<0.0")
+    cftable_sell = cftable.query("cash>0.0")
+    if freq == "D":
+        # datedata = [d.to_pydatetime() for d in cftable["date"]]
+        datedata = pd.date_range(startdate, yesterdayobj(), freq="D")
+        selldata = [
+            [row["date"].to_pydatetime(), row["cash"]]
+            for _, row in cftable.iterrows()
+            if row["cash"] > 0
+        ]
+        buydata = [
+            [row["date"].to_pydatetime(), row["cash"]]
+            for _, row in cftable.iterrows()
+            if row["cash"] < 0
+        ]
+        cfmerge = cftable.groupby([cftable["date"].dt.year, cftable["date"].dt.month,
+                                   cftable["date"].dt.day])[
+            "cash"
+        ].sum()
+
+        sumdata = [
+            [dt.datetime.strptime(str(a) , "(%Y, %m, %d)"), b]
+            for a, b in cfmerge.iteritems()
+            # if b < 0
+        ]
+
+    elif freq == "W":
+        cfmerge = cftable.groupby([cftable["date"].dt.year, cftable["date"].dt.week])[
+            "cash"
+        ].sum()
+
+        cfmerge_sell = cftable_sell.groupby([cftable_sell["date"].dt.year, cftable_sell["date"].dt.week])[
+            "cash"
+        ].sum()
+        cfmerge_buy = cftable_buy.groupby([cftable_buy["date"].dt.year, cftable_buy["date"].dt.week])[
+            "cash"
+        ].sum()
+
+        # datedata = [
+        #     dt.datetime.strptime(str(a) + "4", "(%Y, %W)%w")
+        #     for a, _ in cfmerge.iteritems()
+        # ]
+        datedata = pd.date_range(
+            startdate, yesterdayobj() + pd.Timedelta(days=7), freq="W-THU"
+        )
+        selldata = [
+            [dt.datetime.strptime(str(a) + "4", "(%G, %V)%w"), b]
+            for a, b in cfmerge_sell.iteritems()
+            # if b > 0
+        ]
+        buydata = [
+            [dt.datetime.strptime(str(a) + "4", "(%G, %V)%w"), b]
+            for a, b in cfmerge_buy.iteritems()
+            # if b < 0
+        ]
+        sumdata = [
+            [dt.datetime.strptime(str(a) + "4", "(%G, %V)%w"), b]
+            for a, b in cfmerge.iteritems()
+            # if b < 0
+        ]
+        # %V pandas gives iso weeknumber which is different from python original %W or %U,
+        # see https://stackoverflow.com/questions/5882405/get-date-from-iso-week-number-in-python for more details
+        # python3.6+ required for %G and %V
+        # but now seems no equal distance between sell and buy data, no idea why
+    elif freq == "M":
+        cfmerge = cftable.groupby([cftable["date"].dt.year, cftable["date"].dt.month])[
+            "cash"
+        ].sum()
+
+        cfmerge_buy = cftable_buy.groupby([cftable_buy["date"].dt.year, cftable_buy["date"].dt.month])[
+            "cash"
+        ].sum()
+        cfmerge_sell = cftable_sell.groupby([cftable_sell["date"].dt.year, cftable_sell["date"].dt.month])[
+            "cash"
+        ].sum()
+
+        # datedata = [
+        #     dt.datetime.strptime(str(a) + "15", "(%Y, %m)%d")
+        #     for a, _ in cfmerge.iteritems()
+        # ]
+        datedata = pd.date_range(
+            startdate, yesterdayobj() + pd.Timedelta(days=31), freq="MS"
+        )
+        selldata = [
+            [dt.datetime.strptime(str(a) + "1", "(%Y, %m)%d"), b]
+            for a, b in cfmerge_sell.iteritems()
+            # if b > 0
+        ]
+        buydata = [
+            [dt.datetime.strptime(str(a) + "1", "(%Y, %m)%d"), b]
+            for a, b in cfmerge_buy.iteritems()
+            # if b < 0
+        ]
+        sumdata = [
+            [dt.datetime.strptime(str(a) + "1", "(%Y, %m)%d"), b]
+            for a, b in cfmerge.iteritems()
+            # if b < 0
+        ]
+
+    elif freq == "Y":
+        cfmerge = cftable.groupby([cftable["date"].dt.year])[
+            "cash"
+        ].sum()
+
+        cfmerge_buy = cftable_buy.groupby([cftable_buy["date"].dt.year])[
+            "cash"
+        ].sum()
+        cfmerge_sell = cftable_sell.groupby([cftable_sell["date"].dt.year])[
+            "cash"
+        ].sum()
+
+        # datedata = [
+        #     dt.datetime.strptime(str(a) + "15", "(%Y, %m)%d")
+        #     for a, _ in cfmerge.iteritems()
+        # ]
+        datedata = pd.date_range(
+            startdate, yesterdayobj() + pd.Timedelta(days=365), freq="Y"
+        )
+        selldata = [
+            [dt.datetime.strptime(str(a) + "-12-31", "%Y-%m-%d"), b]
+            for a, b in cfmerge_sell.iteritems()
+            # if b > 0
+        ]
+        buydata = [
+            [dt.datetime.strptime(str(a) + "-12-31", "%Y-%m-%d"), b]
+            for a, b in cfmerge_buy.iteritems()
+            # if b < 0
+        ]
+        sumdata = [
+            [dt.datetime.strptime(str(a) + "-12-31", "%Y-%m-%d"), b]
+            for a, b in cfmerge.iteritems()
+            # if b < 0
+        ]
+
+
+    else:
+        raise ParserFailure("no such freq tag supporting")
+
+    buydata = [[d, round(x, 2)] for d, x in buydata]
+    selldata = [[d, round(x, 2)] for d, x in selldata]
+    sumdata = [[d, round(x, 2)] for d, x in sumdata]
+    bar = Bar()
+    datedata = list(datedata)
+    bar.add_xaxis(xaxis_data=datedata)
+    # buydata should before selldata, since emptylist in the first line would make the output fig empty: may be bug in pyecharts
+    bar.add_yaxis("买入", buydata)
+    bar.add_yaxis("卖出", selldata)
+    bar.add_yaxis("sum", sumdata)
+    bar.set_global_opts(
+        tooltip_opts=opts.TooltipOpts(
+            is_show=True,
+            trigger="axis",
+            trigger_on="mousemove",
+            axis_pointer_type="cross",
+        ),
+        datazoom_opts=[opts.DataZoomOpts(range_start=90, range_end=100)],
+    )
+    if rendered:
+        return bar.render_notebook()
+    else:
+        return bar
+
+
+
 
 def vtradecost(
     self, cftable, unitcost=False, start=None, end=yesterdayobj(), rendered=True
@@ -953,6 +1128,15 @@ class trade:
         :returns: pyecharts.charts.bar.render_notebook()
         """
         return vtradevolume(self.cftable, freq=freq, rendered=rendered)
+    def v_tradevolume_buysell(self, freq="D", rendered=True):
+        """
+        visualization on trade summary modified by kahar
+
+        :param freq: string, "D", "W" and "M" are supported
+        :returns: pyecharts.charts.bar.render_notebook()
+        """
+        return vtradevolume_buysell(self.cftable, freq=freq, rendered=rendered)
+
 
     def v_tradecost(self, start=None, end=yesterdayobj(), rendered=True):
         """
@@ -1011,23 +1195,32 @@ class trade:
         partp = self.price[self.price["date"] >= self.cftable.iloc[0].date]
         # 多基金账单时起点可能非该基金持有起点
         partp = partp[partp["date"] <= end]
-
-        date = [d.date() for d in partp.date]
+        logger.debug("partb={}".format(partp["date"]))
+        date = [d for d in partp.date]
+        # print("date in totcash",date)
         valuedata = [
-            self.briefdailyreport(d).get("currentvalue", 0) for d in partp.date
+            self.briefdailyreport(d).get("currentvalue", 0) for d in date
         ]
         cashdata = [
-            self.unitcost(d)*self.briefdailyreport(d).get("currentshare")  for d in partp.date
+            self.unitcost(d)*self.briefdailyreport(d).get("currentshare")  for d in date
         ]
-        #print(cashdata)
+        # print("cashdata",cashdata)
 
         #mark buy sell begin
 
+        pprice = self.price[self.price["date"] >= self.cftable.iloc[0].date]
         pprice = self.price[self.price["date"] <= end]
         pcftable = self.cftable
         coords = []
         # pcftable = pcftable[abs(pcftable["cash"]) > threhold]
+        # print("pprice[date]",pprice["date"])
         for i, r in pcftable.iterrows():
+            if(r.date < pprice["date"].iloc[0]):
+                print("第{}次购买日期={}还没开始标价".format(i,r.date))
+                continue
+
+            # print("i={},pprice[date]<=r.date={}".format(i,pprice["date"]<=r.date))
+            # coords.append([r.date, pprice[pprice["date"] <= r.date].iloc[-1]["netvalue"]])
             coords.append([r.date, pprice[pprice["date"] <= r.date].iloc[-1]["netvalue"]])
         # print("coords:",coords)
         upper = pcftable.cash.abs().max()
@@ -1161,6 +1354,9 @@ class trade:
         coords_markvalue = []
         pos = 3
         for i, r in pcftable.iterrows():
+            if(r.date < pprice["date"].iloc[0]):
+                print("第{}次购买日期={}还没开始标价".format(i,r.date))
+                continue
             offset = r.date - offset
             valuecoords = valuedata[date_dict[convert_date(r.date.date())]]
             cashcoords = cashdata[date_dict[convert_date(r.date.date())]]
