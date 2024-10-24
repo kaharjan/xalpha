@@ -133,20 +133,37 @@ def lru_cache_time(ttl=None, maxsize=None):
     return wrapper
 
 
+tokens = {}
+
 # TODO: 缓存 token 的合适时间尺度
 @lru_cache_time(ttl=300)
-def get_token():
+def get_token(source="xq"):
     """
     获取雪球的验权 token，匿名也可获取，而且似乎永远恒定(大时间范围内会改变)
 
     :return:
     """
-    r = rget("https://xueqiu.com", headers={"user-agent": "Mozilla"})
-    #kahar add xq_a_token or not able to retrive data from xueqiu
-    # return {"xq_a_token": r.cookies["xq_a_token"],"u": r.cookies["u"]}
-    # return  {"xq_a_token":"dbc1dc6d13bd101dd06f18c5b7f2fb2eb276fb5a","u":"971727501440946"}
-    #from xueqiu website : xq_a_token and cookiesu
-    return  {"xq_a_token":"f84a0b79c9e449cb1003cb36412faa34001a6697","u":"971727501440946"}
+# <<<<<<< HEAD
+#     r = rget("https://xueqiu.com", headers={"user-agent": "Mozilla"})
+#     #kahar add xq_a_token or not able to retrive data from xueqiu
+#     # return {"xq_a_token": r.cookies["xq_a_token"],"u": r.cookies["u"]}
+#     # return  {"xq_a_token":"dbc1dc6d13bd101dd06f18c5b7f2fb2eb276fb5a","u":"971727501440946"}
+#     #from xueqiu website : xq_a_token and cookiesu
+#     return  {"xq_a_token":"f84a0b79c9e449cb1003cb36412faa34001a6697","u":"971727501440946"}
+# =======
+    if source in tokens:
+        return tokens[source]
+    if source in ["xq", "xueqiu"]:
+        r = rget("https://xueqiu.com", headers={"user-agent": "Mozilla"})
+        return {"xq_a_token": r.cookies["xq_a_token"], "u": r.cookies["u"]}
+    else:
+        raise ValueError("`get_token` doesn't support %s source" % source)
+
+
+def set_token(key, source="xq"):
+    global tokens
+    tokens[source] = key
+# >>>>>>> upstream/master
 
 
 def get_historical_fromxq(code, count, type_="before", full=False):
@@ -2655,9 +2672,7 @@ def get_bar_fromxq(code, prev, interval=3600):
         interval=interval,
         type_=type_,
     )
-    r = rget(
-        url, headers={"user-agent": "Mozilla/5.0"}, cookies=get_token()
-    )
+    r = rget(url, headers={"user-agent": "Mozilla/5.0"}, cookies=get_token())
     if not r.text:
         return  # None
     else:

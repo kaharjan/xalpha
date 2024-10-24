@@ -256,7 +256,7 @@ class mul:
         # print("dtlist",dtlist)
         # nndtlist = set([item[0] for item in dtlist])
         nndtlist = [item[0] for item in dtlist]
-        # nndtlist = sorted(list(nndtlist), key=lambda x: x)
+        nndtlist = sorted(list(nndtlist), key=lambda x: x)
         reslist = []
         reslist = [item[1] for item in dtlist]
         # for date in nndtlist:
