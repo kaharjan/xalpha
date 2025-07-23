@@ -135,6 +135,7 @@ def lru_cache_time(ttl=None, maxsize=None):
 
 tokens = {}
 
+
 # TODO: 缓存 token 的合适时间尺度
 @lru_cache_time(ttl=300)
 def get_token(source="xq"):
@@ -154,7 +155,7 @@ def get_token(source="xq"):
     if source in tokens:
         return tokens[source]
     if source in ["xq", "xueqiu"]:
-        r = rget("https://xueqiu.com", headers={"user-agent": "Mozilla"})
+        r = rget("https://xueqiu.com/hq", headers={"user-agent": "Mozilla"})
         return {"xq_a_token": r.cookies["xq_a_token"], "u": r.cookies["u"]}
     else:
         raise ValueError("`get_token` doesn't support %s source" % source)
@@ -509,9 +510,15 @@ def get_portfolio_fromttjj(code, start=None, end=None):
     table = s.find("table", class_="tzxq")
     df = pd.read_html(str(table))[0]
     df["date"] = pd.to_datetime(df["报告期"])
-    df["stock_ratio"] = df["股票占净比"].replace("---", "0%").apply(lambda s: _float(s[:-1]))
-    df["bond_ratio"] = df["债券占净比"].replace("---", "0%").apply(lambda s: _float(s[:-1]))
-    df["cash_ratio"] = df["现金占净比"].replace("---", "0%").apply(lambda s: _float(s[:-1]))
+    df["stock_ratio"] = (
+        df["股票占净比"].replace("---", "0%").apply(lambda s: _float(s[:-1]))
+    )
+    df["bond_ratio"] = (
+        df["债券占净比"].replace("---", "0%").apply(lambda s: _float(s[:-1]))
+    )
+    df["cash_ratio"] = (
+        df["现金占净比"].replace("---", "0%").apply(lambda s: _float(s[:-1]))
+    )
     #     df["dr_ratio"] = df["存托凭证占净比"].replace("---", "0%").apply(lambda s: xa.cons._float(s[:-1]))
     df["assets"] = df["净资产（亿元）"]
     df = df[::-1]
@@ -1111,9 +1118,13 @@ def _get_daily(
             _from = "SP"
         elif code.startswith("SPC") and code[3:].split(".")[0].isdigit():
             _from = "SPC"
-        elif code.startswith("ZZ") and code[4:].isdigit():  # 注意中证系列指数的代码里可能包含字母！
+        elif (
+            code.startswith("ZZ") and code[4:].isdigit()
+        ):  # 注意中证系列指数的代码里可能包含字母！
             _from = "ZZ"
-        elif code.startswith("GZ") and code[-3:].isdigit():  # 注意国证系列指数的代码里可能包含多个字母！
+        elif (
+            code.startswith("GZ") and code[-3:].isdigit()
+        ):  # 注意国证系列指数的代码里可能包含多个字母！
             _from = "GZ"
         elif code.startswith("HZ") and code[2:].isdigit():
             _from = "HZ"
@@ -1420,12 +1431,16 @@ def get_cninvesting_rt(suburl, app=False):
 
 
 def get_rt_from_sina(code):
+    if code.startswith("sina-"):
+        code = code[5:]
     if (
         code.startswith("SH") or code.startswith("SZ") or code.startswith("HK")
     ) and code[2:].isdigit():
         tinycode = code[:2].lower() + code[2:]
         if code.startswith("HK"):  # 港股额外要求实时
             tinycode = "rt_" + tinycode
+    elif code.startswith("fx_s"):
+        tinycode = code
     else:  # 美股
         tinycode = "gb_"
         if code.startswith("."):
@@ -1463,7 +1478,14 @@ def get_rt_from_sina(code):
             for i in range(20, 29)[::2]:
                 d["sell" + str(int((i - 18) / 2))] = (l[i + 1], l[i])
             d["current_ext"] = None
-
+    elif code.startswith("fx_s"):  # 外汇
+        # 'var hq_str_fx_sinrcny="12:43:37,0.085000,0.086000,0.085400,4,0.085400,0.085400,0.085000,0.085000,
+        # 印度卢比兑人民币即期汇率,-0.470000,-0.000400,0.004684,OTC Data Services Editorial Team Calculated Cross Rates.
+        # New York,0.081300,0.081300,*-****+*,2025-04-23";\n'
+        # TODO: column meaning check
+        d["time"] = l[0]
+        d["current"] = float(l[1])
+        d["name"] = l[9]
     else:
         d["currency"] = "USD"
         d["current"] = float(l[1])
@@ -1807,7 +1829,12 @@ def get_rt(
     elif _from in ["xueqiu", "xq", "snowball"]:
         try:
             return get_xueqiu_rt(code)
-        except (IndexError, ValueError, AttributeError, TypeError) as e:  # 默认雪球实时引入备份机制
+        except (
+            IndexError,
+            ValueError,
+            AttributeError,
+            TypeError,
+        ) as e:  # 默认雪球实时引入备份机制
             logging.warning(
                 "Fails due to %s, now trying backup data source from sina" % e.args[0]
             )
@@ -1815,7 +1842,12 @@ def get_rt(
     elif _from in ["sina", "sn", "xinlang"]:
         try:
             return get_rt_from_sina(code)
-        except (IndexError, ValueError, AttributeError, TypeError) as e:  # 默认雪球实时引入备份机制
+        except (
+            IndexError,
+            ValueError,
+            AttributeError,
+            TypeError,
+        ) as e:  # 默认雪球实时引入备份机制
             logging.warning(
                 "Fails due to %s, now trying backup data source from xueqiu" % e.args[0]
             )
@@ -2054,7 +2086,9 @@ def cachedio(**ioconf):
                             else:  # 单日多行的表默认最后一日是准确的，不再刷新了
                                 kws["start"] = nextday_str
                             kws["end"] = end_str
-                            if has_weekday(nextday_str, kws["end"]):  # 新更新的日期里有工作日
+                            if has_weekday(
+                                nextday_str, kws["end"]
+                            ):  # 新更新的日期里有工作日
                                 df2 = f(*args, **kws)
                                 if df2 is not None and len(df2) > 0:
                                     df2 = df2[df2["date"] >= kws["start"]]
@@ -2326,7 +2360,8 @@ def get_fund_peb(code, date, threhold=0.3):
                 pbl.append(fdf["pb"])
         except (KeyError, TypeError, IndexError) as e:
             logger.warning(
-                "%s: 获取历史估值出现问题: %s, 可能由于网站故障或股票代码非中美市场" % (r["scode"], e.args[0])
+                "%s: 获取历史估值出现问题: %s, 可能由于网站故障或股票代码非中美市场"
+                % (r["scode"], e.args[0])
             )
             pel.append(None)
             pbl.append(None)
@@ -2463,7 +2498,11 @@ def get_teb(code, date):
     df = get_fundamentals(query(valuation).filter(valuation.code.in_(sl)), date=date)
     df["e"] = df["market_cap"] / df["pe_ratio"]
     df["b"] = df["market_cap"] / df["pb_ratio"]
-    return {"e": df["e"].sum(), "b": df["b"].sum(), "m": df["market_cap"].sum()}  # 亿人民币
+    return {
+        "e": df["e"].sum(),
+        "b": df["b"].sum(),
+        "m": df["market_cap"].sum(),
+    }  # 亿人民币
 
 
 def get_teb_range(code, start, end, freq="W-FRI"):

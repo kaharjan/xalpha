@@ -653,9 +653,11 @@ class trade:
             self.remtable = pd.DataFrame([], columns=["date", "rem"])
         else:
             self.remtable = remtable
-        self.status = status.loc[:, ["date", code]]
-        self.status = self.status[self.status[code] != 0]
-        self._arrange()
+        self.status = status
+        if status is not None:
+            self.status = status.loc[:, ["date", code]]
+            self.status = self.status[self.status[code] != 0]
+            self._arrange()
 
     def _arrange(self):
         self.recorddate_set = set(self.status.date)
@@ -762,7 +764,9 @@ class trade:
             if (lastdate in self.recorddate_set) and (date not in self.aim.zhesuandate):
                 # deal with buy and sell and label the fenhongzaitouru, namely one label a 0.05 in the original table to label fenhongzaitouru
                 value = self.status[self.status["date"] <= lastdate].iloc[-1].loc[code]
-                if date in self.aim.fenhongdate:  # 0.05 的分红行为标记，只有分红日才有效
+                if (
+                    date in self.aim.fenhongdate
+                ):  # 0.05 的分红行为标记，只有分红日才有效
                     fenhongmark = round(10 * value - int(10 * value), 1)
                     # TODO: any rounding issue here for th int
                     if fenhongmark == 0.5 and label == 0:
@@ -1561,30 +1565,38 @@ class itrade(trade):
     场内交易，只包含 cftable 现金流表
     """
 
-    def __init__(self, code, status, name=None):
+    def __init__(self, code, status, cftable=None, name=None):
         """
 
         :param code: str. 代码格式与 :func:`xalpha.universal.get_daily` 要求相同
         :param status: 记账单或 irecord 类。
+        :param cftable: pd.DataFrame. 现金流表，每行为不同变更日期，三列分别为 date，cash， share，
+            标记对于某个投资标的交易记录，该变量和 `status` 需要一个提供。
         :param name: Optional[str]. 可提供标的名称。
         """
         self.code = code
-        if isinstance(status, irecord):
-            self.status = status.filter(code)
+        self.cftable = cftable
+        if status is not None:
+            if isinstance(status, irecord):
+                self.status = status.filter(code)
+            else:
+                self.status = status[status.code == code]
+            start = self.status.iloc[0]["date"].strftime("%Y-%m-%d")
         else:
-            self.status = status[status.code == code]
+            start = cftable.iloc[0]["date"].strftime("%Y-%m-%d")
         # self.cftable = pd.DataFrame([], columns=["date", "cash", "share"])
         try:
-            self.price = xu.get_daily(
-                self.code, start=self.status.iloc[0]["date"].strftime("%Y-%m-%d")
-            )
+            self.price = xu.get_daily(self.code, start=start)
             self.price["netvalue"] = self.price["close"]
         except Exception as e:
             logger.warning(
                 "%s when trade trying to get daily price of %s" % (e, self.code)
             )
             self.price = None
-        self._arrange()
+        if self.cftable is None:
+            # 这里逻辑和 trade 有所不同，trade 的 cftable 后会继续根据 status 交易，
+            # 这里有 cftable 就不再继续交易，未来可能会更新成和 trade 一致的逻辑
+            self._arrange()
         if not name:
             try:
                 self.name = get_rt(code)["name"]
@@ -1647,7 +1659,9 @@ class itrade(trade):
                     d["cash"].append(0)
                     d["share"].append(r.share)  # 直接记录总的应增加+或减少的份额数
                 else:
-                    d["cash"].append(-r.value * r.share - abs(r.fee))  # 手续费总是正的，和买入同号
+                    d["cash"].append(
+                        -r.value * r.share - abs(r.fee)
+                    )  # 手续费总是正的，和买入同号
                     d["share"].append(r.share)
         self.cftable = pd.DataFrame(d)
 
