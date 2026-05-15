@@ -27,7 +27,6 @@ from xalpha.trade import (
 from xalpha.universal import get_fund_type, ttjjcode, get_rt, get_industry_fromxq
 import xalpha.universal as xu
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -42,7 +41,8 @@ class mul:
     :param istatus: 场内交易账单，也可以是 irecord 对象。
             若提供，则场内外交易联合统计展示。该选项只保证 ``combsummary`` 方法可正常使用，不保证 ``mul`` 类的其他方法可用。
     :param property: Dict[fundcode, property_number]. property number 的解释：
-            int. 1: 基金申购采取分位以后全舍而非四舍五入（这种基金是真实存在的==）。2：基金默认分红再投入（0 则是默认现金分红）。4：基金赎回按净值处理（暂时只支持货币基金，事实上无法精确支持按份额赎回的净值型基金）。将想要的性质数值相加即可，类似 *nix 上的 xwr 系统。
+            int. 1: 基金申购采取分位以后全舍而非四舍五入（这种基金是真实存在的==）。2：基金默认分红再投入（0 则是默认现金分红）。
+            4：基金赎回按净值处理（暂时只支持货币基金，事实上无法精确支持按份额赎回的净值型基金）。将想要的性质数值相加即可，类似 *nix 上的 xwr system。
     :param fetch: boolean, when open the fetch option, info class will try fetching from local files first in the init
     :param save: boolean, when open the save option, info classes automatically save the class to files
     :param path: string, the file path prefix of IO, or object or engine from sqlalchemy to connect sql database
@@ -169,11 +169,11 @@ class mul:
             "xirr",
             "投资收益率",
         ]
-        summarydf = pd.DataFrame([], columns=columns)
-        for fund in self.fundtradeobj:
-            summarydf = pd.concat(
-                [summarydf, fund.dailyreport(date)], ignore_index=True, sort=True
-            )
+        summarydfs = [fund.dailyreport(date) for fund in self.fundtradeobj]
+        if not summarydfs:
+            summarydf = pd.DataFrame([], columns=columns)
+        else:
+            summarydf = pd.concat(summarydfs, ignore_index=True, sort=True)
         tname = "总计"
         tcode = "total"
         tunitvalue = float("NaN")
@@ -187,6 +187,7 @@ class mul:
         tturnover = turnoverrate(self.totcftable[self.totcftable["date"] <= date], date)
         # 计算的是总系统作为整体和外界的换手率，而非系统各成分之间的换手率
         tearn = summarydf["基金收益总额"].sum()
+# <<<<<<< HEAD
         trate = round(tearn / tbtnk * 100, 4)
         try:
             xirr = self.xirrrate(date)
@@ -194,6 +195,9 @@ class mul:
             # print("xirr{}".format(xirr))
         except:
             xirr = float("NaN")
+# =======
+        # trate = round(tearn / tbtnk * 100, 4) if tbtnk != 0 else 0.0
+# >>>>>>> upstream/master
         trow = pd.DataFrame(
             [
                 [
@@ -209,7 +213,7 @@ class mul:
                     toutput,
                     tturnover,
                     tearn,
-                    xirr,
+                xirr,
                     trate,
                 ]
             ],
@@ -238,6 +242,7 @@ class mul:
         for date in nndtlist:
             reslist.append(sum([item[1] for item in dtlist if item[0] == date]))
         df = pd.DataFrame(data={"date": nndtlist, "cash": reslist})
+        df["date"] = pd.to_datetime(df["date"])
         df = df[df["cash"] != 0]
         df = df.reset_index(drop=True)
         return df
@@ -345,7 +350,7 @@ class mul:
             if value >= threhold:
                 try:
                     name = get_rt(code)["name"]
-                except:
+                except Exception:
                     name = code
                 l.append([name, code, value])
         fdf = pd.DataFrame(l, columns=["name", "code", "value"])

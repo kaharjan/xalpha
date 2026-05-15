@@ -3,19 +3,19 @@
 modules for misc crawler without unfied API
 """
 
-import re
-import pandas as pd
 import datetime as dt
 import logging
-import numpy as np
-from bs4 import BeautifulSoup
+import re
 from functools import lru_cache
+
+import numpy as np
+import pandas as pd
+from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
 from xalpha.cons import (
     rget,
-    rpost,
     rget_json,
     rpost_json,
     today_obj,
@@ -143,9 +143,7 @@ def get_sz_status(category="cb", date=None):
 @lru_cache_time(ttl=7200, maxsize=512)
 def get_sz_fs(code):
     url = "http://www.szse.cn/api/report/ShowReport/data?SHOWTYPE=JSON&\
-CATALOGID=1945_LOF&txtQueryKeyAndJC={code}".format(
-        code=code
-    )
+CATALOGID=1945_LOF&txtQueryKeyAndJC={code}".format(code=code)
     r = rget_json(url)
     return _float(r[0]["data"][0]["dqgm"]) * 1e4
 
@@ -226,9 +224,7 @@ def get_fund_list(ft):
     # hh, zq, zs, gp, qdii, fof
     r = rget(
         "http://fund.eastmoney.com/data/FundGuideapi.aspx?\
-dt=0&ft={ft}&sd=&ed=&sc=z&st=desc&pi=1&pn=10000&zf=diy&sh=list".format(
-            ft=ft
-        ),
+dt=0&ft={ft}&sd=&ed=&sc=z&st=desc&pi=1&pn=10000&zf=diy&sh=list".format(ft=ft),
         headers={
             "Host": "fund.eastmoney.com",
             "Referer": "http://fund.eastmoney.com/daogou/",

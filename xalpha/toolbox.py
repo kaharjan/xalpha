@@ -3,19 +3,22 @@
 modules for Object oriented toolbox which wrappers get_daily and some more
 """
 
+import datetime as dt
+import logging
 import re
 import sys
-import datetime as dt
+from collections import deque
+from functools import lru_cache, wraps
+
 import numpy as np
 import pandas as pd
-from collections import deque
-from functools import wraps, lru_cache
-import logging
-from scipy import stats
 from bs4 import BeautifulSoup
+from scipy import stats
 
 from xalpha.cons import (
     opendate,
+    opendate_dt,
+    pd_to_datetime,
     yesterday,
     next_onday,
     last_onday,
@@ -25,7 +28,6 @@ from xalpha.cons import (
     xnpv,
     xirr,
     rget,
-    rpost,
 )
 from xalpha.info import get_fund_holdings
 from xalpha.universal import (
@@ -101,11 +103,9 @@ def _set_display_notebook():
     """
     Initialize DataTable mode for pandas DataFrame represenation.
     """
-    from IPython.core.display import display, Javascript
+    from IPython.display import display, Javascript
 
-    display(
-        Javascript(
-            """
+    display(Javascript("""
             require.config({
                 paths: {
                     DT: '//cdn.datatables.net/1.10.20/js/jquery.dataTables.min',
@@ -113,9 +113,7 @@ def _set_display_notebook():
             });
             $('head').append('<link rel="stylesheet" type="text/css" href="//cdn.datatables.net/1.10.20/css/jquery.dataTables.min.css">');
             $('head').append('<style> td, th {{text-align: center;}}</style>')
-        """
-        )
-    )
+        """))
 
     def _repr_datatable_(self):
         # create table DOM
@@ -225,7 +223,7 @@ class IndexPEBHistory:
         else:
             try:
                 self.name = get_rt(self.scode)["name"]
-            except:
+            except Exception:
                 self.name = self.scode
             if not start:
                 start = "2012-01-01"  # 可能会出问题，对应指数还未有数据
@@ -641,11 +639,11 @@ class Compare:
                 currency = "CNY"  # 标的不做汇率调整
             codelist.append(code)
             df = xu.get_daily(code, start=start, end=end)
-            df = df[df.date.isin(opendate)]
+            df = df[df.date.isin(opendate_dt)]
             currency_code = _get_currency_code(currency)
             if currency_code:
                 cdf = xu.get_daily(currency_code, start=start, end=end)
-                cdf = cdf[cdf["date"].isin(opendate)]
+                cdf = cdf[cdf["date"].isin(opendate_dt)]
                 df = df.merge(right=cdf, on="date", suffixes=("_x", "_y"))
                 df[col] = df[col + "_x"] * df[col + "_y"]
             if normalize:
@@ -913,7 +911,7 @@ class CBCalculator:
                 if not self.name:
                     rt = get_rt(self.code)
                     self.name = rt["name"]
-            except:
+            except Exception:
                 self.name = "unknown"
             df = xu.get_daily(self.code, prev=100, end=self.date_obj.strftime("%Y%m%d"))
             self.cbp = df.iloc[-1]["close"]
@@ -1566,8 +1564,8 @@ class QDIIPredict:
         if fetch:
             df = fetch_backend("t1-" + code)
             if df is not None:
-                df["date"] = pd.to_datetime(df["date"])
-                for i, r in df.iterrows():
+                df["date"] = pd_to_datetime(df["date"])
+                for _, r in df.iterrows():
                     self.set_t1(float(r["t1"]), r["date"].strftime("%Y-%m-%d"))
                     self.set_position(float(r["pos"]), r["date"].strftime("%Y-%m-%d"))
             else:  # nodf
@@ -1953,7 +1951,7 @@ class QDIIPredict:
         fq = deque([c / 100] * l, maxlen=l)
         current_pos = c / 100
         dl = pd.Series(pd.date_range(start=start, end=end))
-        dl = dl[dl.isin(opendate)]
+        dl = dl[dl.isin(opendate_dt)]
         for j, d in enumerate(dl):
             if j == 0:
                 continue
@@ -2010,7 +2008,7 @@ class QDIIPredict:
         # ud 预测涨的多
         # du 预测跌的多
         # dd 预测跌的少
-        for i, row in cpdf.iterrows():
+        for _, row in cpdf.iterrows():
             if row[col1] >= 0 and row[col2] > 0:
                 uu += 1
             elif row[col1] >= 0 >= row[col2]:

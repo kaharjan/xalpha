@@ -2,6 +2,7 @@
 """
 module for realtime watch and notfication
 """
+
 # deprecated
 # 该模块与现在的主线进展关系不大，可用性不强，
 # xalpha 不应过度干涉通知或可能的自动交易部分

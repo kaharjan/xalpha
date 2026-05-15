@@ -2,6 +2,7 @@
 """
 module for trade class
 """
+
 import math
 import datetime as dt
 import logging
@@ -11,7 +12,14 @@ from pyecharts.charts import Bar, Line
 from pyecharts import options as opts
 
 import xalpha.remain as rm
-from xalpha.cons import convert_date, line_opts, myround, xirr, yesterdayobj
+from xalpha.cons import (
+    convert_date,
+    line_opts,
+    myround,
+    xirr,
+    yesterdayobj,
+    pd_get_week,
+)
 from xalpha.exceptions import ParserFailure, TradeBehaviorError
 from xalpha.record import irecord
 import xalpha.universal as xu
@@ -123,6 +131,8 @@ def vtradevolume(cftable, freq="D", rendered=True):
     :returns: the Bar object
     """
     ### WARN: datazoom and time conflict, sliding till 1970..., need further look into pyeacharts
+    cftable = cftable.copy()
+    cftable["date"] = pd.to_datetime(cftable["date"])
     startdate = cftable.iloc[0]["date"]
     if freq == "D":
         # datedata = [d.to_pydatetime() for d in cftable["date"]]
@@ -138,14 +148,9 @@ def vtradevolume(cftable, freq="D", rendered=True):
             if row["cash"] < 0
         ]
     elif freq == "W":
-        if pd.__version__[0] == "1":
-            cfmerge = cftable.groupby(
-                [cftable["date"].dt.year, cftable["date"].dt.week]
-            )["cash"].sum()
-        else:
-            cfmerge = cftable.groupby(
-                [cftable["date"].dt.year, cftable["date"].dt.isocalendar().week]
-            )["cash"].sum()
+        cfmerge = cftable.groupby(
+            [cftable["date"].dt.year, pd_get_week(cftable["date"])]
+        )["cash"].sum()
         # datedata = [
         #     dt.datetime.strptime(str(a) + "4", "(%Y, %W)%w")
         #     for a, _ in cfmerge.items()
@@ -399,9 +404,11 @@ def vtradecost(
     """
     funddata = []
     costdata = []
+    end = convert_date(end)
     pprice = self.price[self.price["date"] <= end]
     pcftable = cftable
     if start is not None:
+        start = convert_date(start)
         pprice = pprice[pprice["date"] >= start]
         pcftable = pcftable[pcftable["date"] >= start]
     for _, row in pprice.iterrows():
@@ -415,7 +422,7 @@ def vtradecost(
 
     coords = []
     # pcftable = pcftable[abs(pcftable["cash"]) > threhold]
-    for i, r in pcftable.iterrows():
+    for _, r in pcftable.iterrows():
         if r.cash != 0:
             coords.append(
                 [r.date, pprice[pprice["date"] <= r.date].iloc[-1]["netvalue"]]
@@ -767,7 +774,8 @@ class trade:
             rem = self.remtable.iloc[-1].rem
             rdate = date
             if (lastdate in self.recorddate_set) and (date not in self.aim.zhesuandate):
-                # deal with buy and sell and label the fenhongzaitouru, namely one label a 0.05 in the original table to label fenhongzaitouru
+                # deal with buy and sell and label the fenhongzaitouru,
+                # namely one label a 0.05 in the original table to label fenhongzaitouru
                 value = self.status[self.status["date"] <= lastdate].iloc[-1].loc[code]
                 if (
                     date in self.aim.fenhongdate
@@ -1609,7 +1617,7 @@ class itrade(trade):
         if not name:
             try:
                 self.name = get_rt(code)["name"]
-            except:
+            except Exception:
                 self.name = code
         self.type_ = None
 
