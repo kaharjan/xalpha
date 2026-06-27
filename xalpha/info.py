@@ -1139,22 +1139,19 @@ class fundinfo(basicinfo):
             )
             return
         d = {}
-        for _, row in df.iterrows():
-            if row["ratio"] < threhold:
-                continue
-            code = ttjjcode(row["code"])
+        df = df[df["ratio"] >= threhold]
+        for row in df.itertuples(index=False):
+            code = ttjjcode(row.code)
             industry = get_industry_fromxq(code)["industryname"]
             if not industry.strip():
                 logger.warning(
                     "%s has no industry information, cannot be classfied" % code
                 )
             else:
-                if industry not in d:
-                    d[industry] = 0
-                d[industry] += row["ratio"]
+                d[industry] = d.get(industry, 0) + row.ratio
         return d
 
-    def which_industry(self, threhold=1.0):
+    def which_industry(self, threhold=1.0, year="", season="", month=""):
         """
         Experimental API
         当单一行业占比较其他行业的 threhold 倍还多时，自动判定为对应的行业基金
@@ -1163,7 +1160,9 @@ class fundinfo(basicinfo):
         :param threhold: float
         :return: str
         """
-        d = self.get_industry_holdings()
+        d = self.get_industry_holdings(year=year, season=season, month=month)
+        if not d:
+            return "未分类"
         l = sorted([(k, v) for k, v in d.items()], key=lambda s: -s[1])
         s0 = 0
         if l and l[0] and l[0][1]:
